@@ -6,8 +6,9 @@ const groupKeySchema = new Schema(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     version: { type: Number, required: true },
-    wrappedKey: { type: String, required: true },
-    iv: { type: String, required: true },
+    // Mirrors the API limits (routes/conversation.routes.js).
+    wrappedKey: { type: String, required: true, maxlength: 2000 },
+    iv: { type: String, required: true, maxlength: 64 },
     wrappedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   },
   { _id: false }

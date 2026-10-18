@@ -53,6 +53,19 @@ function normalizeMongoUri(uri) {
   return `${scheme}://${encode(user)}:${encode(pass)}@${hostAndPath}`;
 }
 
+/**
+ * CLIENT_URL may list several origins, comma-separated — e.g. a local dev
+ * server plus the deployed client, or a Vercel production URL plus a preview.
+ * Origins are trimmed and stripped of trailing slashes so they compare exactly
+ * with the browser's Origin header. Returns [] when nothing usable is left.
+ */
+export function parseClientOrigins(value) {
+  return String(value)
+    .split(',')
+    .map((origin) => origin.trim().replace(/\/+$/, ''))
+    .filter(Boolean);
+}
+
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.coerce.number().int().min(1).max(65535).default(5000),
@@ -67,7 +80,15 @@ const envSchema = z.object({
     .transform(normalizeMongoUri),
   JWT_SECRET: z.string().min(16, 'JWT_SECRET must be at least 16 characters long'),
   JWT_EXPIRES_IN: z.string().trim().min(1).default('7d'),
-  CLIENT_URL: z.string().trim().min(1).default('http://localhost:5173'),
+  CLIENT_URL: z
+    .string()
+    .trim()
+    .min(1)
+    .default('http://localhost:5173')
+    .refine((value) => parseClientOrigins(value).length > 0, {
+      message: 'CLIENT_URL must contain at least one origin (comma-separated list allowed)',
+    })
+    .transform((value) => parseClientOrigins(value).join(',')),
   REQUIRE_E2EE: z
     .string()
     .default('false')
@@ -85,6 +106,31 @@ if (!parsed.success) {
   console.error('[env] Fix the values above. See server/.env.example for reference.');
   process.exit(1);
 }
+
+/**
+ * A "mongodb+srv://host/" URI with no path makes the driver fall back to a
+ * database literally named "test" — data silently lands somewhere unexpected.
+ * Warn once at boot (the URI itself is never printed, only the advice).
+ */
+function warnIfNoDatabaseName(uri) {
+  const head = uri.split('?')[0];
+  const rest = head.slice(head.indexOf('://') + 3);
+  const slash = rest.indexOf('/');
+  if (slash === -1 || !rest.slice(slash + 1)) {
+    console.warn(
+      '[env] MONGODB_URI has no database name - MongoDB will use its default "test" database. ' +
+        'Add one to the connection string (e.g. .../chatwave).'
+    );
+  }
+}
+
+warnIfNoDatabaseName(parsed.data.MONGODB_URI);
+
+/**
+ * The allowed browser origins as an array. Express CORS uses `includes()` and
+ * Socket.io's CORS accepts the array directly.
+ */
+export const clientOrigins = Object.freeze(parseClientOrigins(parsed.data.CLIENT_URL));
 
 export const env = Object.freeze(parsed.data);
 export default env;

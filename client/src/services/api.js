@@ -44,6 +44,31 @@ if (isDevBuild() && !readApiUrlEnv()) {
 export const TOKEN_STORAGE_KEY = 'chatwave.token';
 export const UNAUTHORIZED_EVENT = 'chatwave:unauthorized';
 
+// Set right before a forced logout so the login page can explain what
+// happened ("Your session expired…"). sessionStorage (not localStorage) so it
+// does not leak into a later, unrelated visit.
+const SESSION_EXPIRED_KEY = 'chatwave.sessionExpired';
+
+/** Marks the session as force-expired (401 / socket auth failure). */
+export function markSessionExpired() {
+  try {
+    sessionStorage.setItem(SESSION_EXPIRED_KEY, '1');
+  } catch {
+    // Storage unavailable: the login page simply shows no explanation.
+  }
+}
+
+/** Reads and clears the flag (used by the login page once). */
+export function consumeSessionExpiredFlag() {
+  try {
+    const expired = sessionStorage.getItem(SESSION_EXPIRED_KEY) === '1';
+    if (expired) sessionStorage.removeItem(SESSION_EXPIRED_KEY);
+    return expired;
+  } catch {
+    return false;
+  }
+}
+
 // 401 coming from these calls means "wrong username/password", not "your
 // session expired", so they must not clear the session or redirect.
 const CREDENTIAL_PATHS = ['/auth/login', '/auth/register'];
@@ -82,6 +107,7 @@ export function clearToken() {
 }
 
 function handleUnauthorized() {
+  markSessionExpired();
   clearToken();
   // Let React (AuthContext) drop its in-memory session too.
   window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT));

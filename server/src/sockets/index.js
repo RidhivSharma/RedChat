@@ -1,8 +1,9 @@
 import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
-import { env } from '../config/env.js';
+import { env, clientOrigins } from '../config/env.js';
 import { User } from '../models/index.js';
 import { OBJECT_ID_RE } from '../utils/conversationAccess.js';
+import { logger } from '../utils/logger.js';
 import { registerMessageHandlers } from './messages.js';
 import { handleConnect, handleDisconnect } from './presence.js';
 import { registerReceiptHandlers } from './receipts.js';
@@ -70,15 +71,16 @@ async function authenticate(socket, next) {
 }
 
 /**
- * Attaches Socket.io to the HTTP server: CORS limited to CLIENT_URL, JWT
- * handshake authentication, presence tracking, room joins and the realtime
- * event handlers. Called once from src/server.js.
+ * Attaches Socket.io to the HTTP server: CORS limited to the configured
+ * client origins (CLIENT_URL, comma-separated), JWT handshake authentication,
+ * presence tracking, room joins and the realtime event handlers. Called once
+ * from src/server.js.
  */
 export function attachSockets(httpServer) {
   if (io) throw new Error('Socket.io is already attached');
 
   io = new Server(httpServer, {
-    cors: { origin: env.CLIENT_URL, credentials: true },
+    cors: { origin: [...clientOrigins], credentials: true },
   });
 
   io.use(authenticate);
@@ -89,12 +91,12 @@ export function attachSockets(httpServer) {
     registerTypingHandlers(io, socket);
 
     handleConnect(io, socket).catch((err) => {
-      console.error('[sockets] connect handling failed:', err?.message ?? err);
+      logger.error('socket connect handling failed', { socketId: socket.id, error: err });
     });
 
     socket.on('disconnect', () => {
       handleDisconnect(io, socket).catch((err) => {
-        console.error('[sockets] disconnect handling failed:', err?.message ?? err);
+        logger.error('socket disconnect handling failed', { socketId: socket.id, error: err });
       });
     });
   });

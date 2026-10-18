@@ -5,18 +5,23 @@ import ConversationList from './ConversationList.jsx';
 import NewGroupDialog from './NewGroupDialog.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
 import UserSearchResults from './UserSearchResults.jsx';
-import { InfoIcon, LogoutIcon, PlusIcon, SearchIcon, XIcon } from './icons.jsx';
+import { BellIcon, InfoIcon, LogoutIcon, PlusIcon, SearchIcon, XIcon } from './icons.jsx';
 import { useChat } from '../hooks/useChat.js';
 import { useDebouncedValue } from '../hooks/useDebouncedValue.js';
 import { useTheme } from '../hooks/useTheme.js';
+import { useToast } from '../hooks/useToast.js';
+import { notificationPermission, requestNotificationPermission } from '../utils/notifications.js';
 
 /**
  * Left rail: brand + theme/logout, the debounced user search (300 ms), the
  * "New group" button (opens the group builder) and the conversation list with
- * its loading / empty / error states.
+ * its loading / empty / error states. Desktop notifications are strictly
+ * opt-in: the permission prompt only appears when the user clicks
+ * "Enable notifications" here.
  */
 export default function Sidebar({ user, onSelectConversation, onLogout }) {
   const { theme, toggleTheme } = useTheme();
+  const { showToast } = useToast();
   const {
     conversations,
     conversationsStatus,
@@ -34,6 +39,7 @@ export default function Sidebar({ user, onSelectConversation, onLogout }) {
 
   const [query, setQuery] = useState('');
   const [groupDialogOpen, setGroupDialogOpen] = useState(false);
+  const [notifyPermission, setNotifyPermission] = useState(() => notificationPermission());
   const trimmedQuery = query.trim();
   const debouncedQuery = useDebouncedValue(trimmedQuery, 300);
   const searchActive = trimmedQuery.length > 0;
@@ -43,6 +49,16 @@ export default function Sidebar({ user, onSelectConversation, onLogout }) {
     const conversation = await startDirectConversation(searchUser.id);
     setQuery('');
     onSelectConversation(conversation.id);
+  }
+
+  async function handleEnableNotifications() {
+    const result = await requestNotificationPermission();
+    setNotifyPermission(result);
+    if (result === 'granted') {
+      showToast('Desktop notifications are on.', 'success');
+    } else if (result === 'denied') {
+      showToast('Your browser blocked notifications for this site.', 'error');
+    }
   }
 
   return (
@@ -156,6 +172,17 @@ export default function Sidebar({ user, onSelectConversation, onLogout }) {
             ? '🔒 Encryption keys are unavailable on this device — sending is disabled.'
             : '🔒 Messages are end-to-end encrypted. ChatWave cannot read them.'}
         </p>
+
+        {notifyPermission === 'default' ? (
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm sidebar-notify"
+            onClick={handleEnableNotifications}
+          >
+            <BellIcon size={15} />
+            Enable notifications
+          </button>
+        ) : null}
       </footer>
 
       <NewGroupDialog

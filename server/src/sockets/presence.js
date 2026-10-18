@@ -1,4 +1,5 @@
 import { Conversation, User } from '../models/index.js';
+import { logger } from '../utils/logger.js';
 import { conversationRoom, personalRoom } from './rooms.js';
 import { deliverPendingMessages } from './receipts.js';
 
@@ -9,6 +10,12 @@ import { deliverPendingMessages } from './receipts.js';
  * scales horizontally.
  */
 const socketsByUser = new Map();
+
+/** How often online users' lastSeen is refreshed, so a crash leaves at most
+ * this much staleness (Disconnect handlers cover clean shutdowns). */
+const PRESENCE_HEARTBEAT_MS = 5 * 60 * 1000;
+
+let heartbeatTimer = null;
 
 /** Registers a socket; returns true when it was the user's first connection. */
 export function addSocket(userId, socketId) {
@@ -38,6 +45,39 @@ export function removeSocket(userId, socketId) {
 
 export function isOnline(userId) {
   return socketsByUser.has(String(userId));
+}
+
+/**
+ * Persists lastSeen = now for every user with at least one live socket.
+ * Called periodically (heartbeat) and once during graceful shutdown — a crash
+ * therefore leaves no more than PRESENCE_HEARTBEAT_MS of stale presence.
+ */
+export async function flushPresence() {
+  const userIds = [...socketsByUser.keys()];
+  if (userIds.length === 0) return 0;
+
+  const lastSeen = new Date();
+  await User.updateMany({ _id: { $in: userIds } }, { $set: { lastSeen } });
+  return userIds.length;
+}
+
+/** Starts the lastSeen heartbeat (idempotent). */
+export function startPresenceHeartbeat() {
+  if (heartbeatTimer) return;
+  heartbeatTimer = setInterval(() => {
+    flushPresence().catch((err) => {
+      logger.error('presence heartbeat failed', { error: err });
+    });
+  }, PRESENCE_HEARTBEAT_MS);
+  // Do not keep the process alive just for presence bookkeeping.
+  heartbeatTimer.unref?.();
+}
+
+/** Stops the heartbeat — used by graceful shutdown/tests. */
+export function stopPresenceHeartbeat() {
+  if (!heartbeatTimer) return;
+  clearInterval(heartbeatTimer);
+  heartbeatTimer = null;
 }
 
 /**
@@ -86,7 +126,7 @@ export async function handleConnect(io, socket) {
   try {
     network = await loadConversationNetwork(userId);
   } catch (err) {
-    console.error('[presence] failed to load conversations:', err?.message ?? err);
+    logger.error('presence: failed to load conversations', { userId, error: err });
   }
 
   // The client may have disconnected while we were loading; the disconnect
@@ -111,13 +151,14 @@ export async function handleConnect(io, socket) {
   try {
     await deliverPendingMessages(io, userId);
   } catch (err) {
-    console.error('[receipts] delivery catch-up failed:', err?.message ?? err);
+    logger.error('receipts: delivery catch-up failed', { userId, error: err });
   }
 }
 
 /**
  * Disconnect handler: when the user's last socket goes away, persist
- * lastSeen and broadcast { userId, online: false, lastSeen }.
+ * lastSeen and broadcast { userId, online: false, lastSeen }. Idempotent —
+ * duplicate disconnects for an already-removed socket are no-ops.
  */
 export async function handleDisconnect(io, socket) {
   const userId = socket.data.userId;
@@ -128,14 +169,14 @@ export async function handleDisconnect(io, socket) {
   try {
     await User.updateOne({ _id: userId }, { $set: { lastSeen } });
   } catch (err) {
-    console.error('[presence] failed to update lastSeen:', err?.message ?? err);
+    logger.error('presence: failed to update lastSeen', { userId, error: err });
   }
 
   let sharedUserIds = [];
   try {
     ({ sharedUserIds } = await loadConversationNetwork(userId));
   } catch (err) {
-    console.error('[presence] failed to load conversation partners:', err?.message ?? err);
+    logger.error('presence: failed to load conversation partners', { userId, error: err });
   }
 
   broadcastPresenceUpdate(io, sharedUserIds, { userId, online: false, lastSeen });

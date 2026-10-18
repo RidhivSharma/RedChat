@@ -284,5 +284,70 @@ All notable changes are grouped by phase.
 - Regression tests (real app functions, JSON round-tripped payloads — `client/tests/crypto.test.js`): A→B, B→A, sender's own row, sidebar `lastMessage` preview, and group v1/v2 keys incl. self-unwrap all fail before the fix (`ciphertext: undefined` → placeholder) and pass after it. New `client/tests/api.test.js` pins the `addMembers`/`rotateKeys` request bodies.
 - Verified: client `npm test` 24/24 (21 crypto + 3 API), server `npm test` 55/55, client `npm run build` OK (112 modules, 405.72 kB JS / 122.96 kB gzip); the built bundle contains the real `VITE_*` URLs (no leftover `import.meta.env` for our modules). Browser flows still need the two-browser manual checklist.
 
+## Phase 10 — Polish, security & robustness pass (2026-10-18)
+
+**Server — observability & shutdown**
+- `src/utils/logger.js` (new) — the only logging entry point: JSON lines in production, human-readable in development, `warn`/`error` include stacks only outside production, and the serializer redacts anything matching `pass|token|secret|authoriz|cookie|jwt|ciphertext|wrappedkey|privatekey|iv|salt`. Message content is never logged anywhere.
+- `src/app.js` — one request log line per API call (method, path *without* query string, status, duration; `/api/health` skipped) and a new `apiLimiter` (300 req/min per IP, disabled under `NODE_ENV=test`) next to the stricter auth limiter.
+- Error handler normalizes parser/framework errors into the shared shape and never leaks internals in production: malformed JSON → `400 VALIDATION_ERROR`, oversized body → `413 PAYLOAD_TOO_LARGE`, malformed ObjectId → `400 VALIDATION_ERROR`, duplicate key → `409 DUPLICATE_KEY`; unexpected errors answer a generic message with `INTERNAL_ERROR`.
+- `src/server.js` — graceful shutdown fixed and reordered: stop the presence heartbeat → flush `lastSeen` for everyone still online → `io.close()` (which also closes the HTTP server) → close MongoDB → let the event loop drain. The previous `process.exit(0)` aborted mid-teardown and killed the process with a libuv `UV_HANDLE_CLOSING ... async.c` assertion on Windows; the shutdown now sets `process.exitCode` instead (verified: `shutdown complete`, exit 0). A failed `listen` (e.g. `EADDRINUSE`) is now one clear log line + exit 1 instead of an unhandled `error` event with a raw stack trace.
+- `src/config/env.js` — warns when `MONGODB_URI` has no database name (the driver would silently fall back to a database named `test`).
+- `src/config/db.js`, `src/sockets/{presence,helpers,index}.js` — boot/connection/presence logs go through the logger; presence gained `flushPresence`, heartbeat start/stop and an idempotent disconnect so a crashed or duplicate socket can no longer leave a user "online" forever.
+
+**Server — authorization & input limits**
+- `DELETE /api/messages/:id` now checks conversation membership *before* the sender check: a member who was removed from a group can no longer delete messages in it (the group-independent path was verified).
+- Group-key envelopes are length-capped (`wrappedKey` ≤ 2000, `iv` ≤ 64, request arrays ≤ 100 / 300 / 100 for create / addMembers / rotateKeys) and the same `maxlength` guards sit on the Mongoose schemas; the 100 kB JSON body limit remains the outer bound.
+- `Message` history index widened to `{ conversationId: 1, createdAt: -1, _id: -1 }` so the cursor pagination sort is fully covered.
+- `server/tests/security.test.js` (new, 8 tests): removed-member delete blocked, other conversations unaffected, no `passwordHash` / foreign `encryptedPrivateKey` in conversation, user-search or `/auth/me` responses, malformed JSON, oversized body, key-envelope limits, health + unknown-route shapes.
+
+**Client — performance**
+- `MessageList` renders a window of the newest 80 timeline items (date separators included) and appends 60 more when the user scrolls to the top or presses "Show earlier messages"; the server is only asked for another history page once the window covers everything in memory, and prepends keep the reading position via scroll-height anchoring. The first visible bubble of a cut window is de-grouped and its day separator is re-added.
+- `MessageList` and `MessageBubble` are memoized; `ChatWindow` passes a stable `useCallback` retry handler, so a typing indicator, an unread badge or a composer keystroke no longer re-renders the whole list.
+- New bubbles ease in (`bubble--enter` on the one message that arrived live — history pages and conversation switches stay still).
+- Composer: a `valueRef`/`justSentRef` guard stops a second Enter or a double click from re-sending the same text with a fresh `clientId`; a stray Enter right after sending no longer shows a validation error.
+
+**Client — UX, accessibility & robustness**
+- Per-conversation mute: bell button in the chat header (`aria-pressed`, unmute/mute label + tooltip), stored under `chatwave.mutedConversations`; a muted conversation never raises a desktop notification.
+- Opt-in desktop notifications: "Enable notifications" in the sidebar footer appears only while permission is `default`, so the browser prompt always follows an explicit click. Notifications are limited to a hidden tab, a non-open conversation and a non-muted conversation, and carry only the sender's display name + "New message" — never text. Clicking one focuses the window and opens that conversation.
+- `utils/title.js` + `hooks/usePageTitle.js` own `document.title` (page name + `(n)` unread prefix, "99+" cap) so the chat layer and the pages can no longer overwrite each other.
+- Contrast: `--color-text-faint` raised to `#5f6f85` (light) / `#8194ad` (dark) so faint text, hints, timestamps and placeholders reach WCAG AA (≥ 4.5:1) on every surface in both themes.
+- Responsive: the chat header now flexes its title block (`flex: 1 1 auto`, ellipsis) and tightens gaps/icon buttons under 767px, with a dedicated ≤ 479px pass (smaller avatar/paddings) so 360px still fits the bell + verify chip + group info; `index.html` adds `interactive-widget=resizes-content` so the on-screen keyboard shrinks the layout instead of burying the composer.
+- Dead code removed: `resetPageTitle` (`utils/title.js`), `hasErrors` (`utils/validation.js`); `SocketContext` now tears the session socket down through `disconnectSocket()` (drops every listener) instead of re-implementing it.
+
+**Verified**
+- Server `npm test`: **63/63 pass** on Atlas `chatwave_test` (12 auth + 3 plaintext contract + 12 conversations + 6 E2EE enforcement + 2 message-service E2EE + 6 receipts + 5 groups + 8 security + 9 sockets/presence).
+- Client `npm test`: **24/24 pass**; `npm run build`: 115 modules, 411.75 kB JS (124.82 kB gzip) + 40.09 kB CSS, **no warnings**.
+- Boot + shutdown smoke (temporary script, since deleted) on `PORT=5001` (5000 was occupied by the running dev server): MongoDB connected, `ChatWave API listening`, `/api/health` → `200 {"status":"ok"}`, unknown route → `404 NOT_FOUND`, oversized body → `413 PAYLOAD_TOO_LARGE`, then `SIGTERM` → `received SIGTERM - shutting down gracefully` → `shutdown complete`, **exit code 0** with no libuv assertion. The same script against the occupied port produced exactly one log line (`port 5000 is already in use - is another ChatWave server still running?`) and exit 1.
+
+**Notes / assumptions**
+- The old `Message` index from earlier phases is still present in existing databases; Mongoose creates the new one on boot but never drops the old. Dropping `{ conversationId: 1, createdAt: -1 }` manually is optional (it is now redundant, not harmful).
+- Root `.env` still has no database name (the app therefore writes to MongoDB's default `test` DB) and an unencoded `@` in the password; both now print a boot-time warning. Fixing the `.env` would move existing dev data, so it was left as-is.
+- Browser-only behaviour of this pass (mute bell, notification prompt, windowing/scroll anchoring, the entrance animation, contrast and the 360px layout, mobile keyboard) could not be executed in a real browser here — the manual checklist in the phase report covers it.
+
+## Phase 11 — Documentation, deployment readiness & QA checklist (2026-10-18)
+
+**Deployment**
+- `CLIENT_URL` now accepts a **comma-separated list of origins**: `src/config/env.js` exports `parseClientOrigins()` + a frozen `clientOrigins` array, trims whitespace and strips trailing slashes, and rejects a list that normalizes to nothing (the value stored on `env.CLIENT_URL` is the normalized, comma-joined string). `src/app.js` (Express CORS) and `src/sockets/index.js` (Socket.io CORS) both use the array, so local dev and a deployed client can be allowed at the same time. `src/server.js` logs the allowed origins as a list at boot.
+- `server/.env.example` documents the list form with an example.
+- `client/public/_redirects` (`/* /index.html 200`) — SPA fallback for Netlify.
+- `client/vercel.json` — rewrite of every path to `/index.html` for Vercel SPA routing.
+- Root `package.json` gained a `test` script (`npm --prefix server test && npm --prefix client test`).
+- Confirmed the required pieces were already in place: `app.set('trust proxy', 1)`, the server binding `process.env.PORT` (zod-validated `PORT`, default 5000) and the root `start`/`build` scripts.
+
+**Tests**
+- `server/tests/cors.test.js` (4 tests, node:test, no database): origin-list normalization, the frozen `clientOrigins` array, Express allowing every configured origin (health + preflight) while a foreign origin gets no CORS headers, and the Socket.io handshake honouring the same list.
+
+**Docs**
+- `README.md` rewritten: overview, features, tech stack, architecture (REST vs Socket.io responsibilities + the three data models), the Security section (kept, now linked from the top), folder structure, server/client environment variable tables, local setup (Atlas or local MongoDB), a run-tests section, the full **Socket.io event reference** (event, direction, payload, ack), a **Deployment** section (Render/Railway for the server — Vercel/Netlify cannot host Socket.io — Vercel/Netlify for the client, host env vars, Atlas network access, free-tier sleep caveats) and a **Troubleshooting** section (MongoDB connection, CORS, socket connection, "Unable to decrypt", read receipts).
+- `QA_CHECKLIST.md` (new): an 18-section manual pass covering register/login/logout, direct chat, realtime send/receive, offline delivery, typing, presence/last seen, ticks, unread badges, delete for everyone, all group operations, key rotation after removal, database encryption verification, the fingerprint dialog, refresh persistence, second-device login, dark mode, the mobile layout and reconnection after a server restart — each with concrete steps, expected results and `mongosh` commands.
+
+**Verified**
+- `node --test tests/cors.test.js` → 4/4 pass.
+- `npm test` (server) → **67/67 pass** on Atlas `chatwave_test` (63 existing + 4 new CORS tests). `npm test` (client) → **24/24 pass**. Root `npm test` (server then client) → exit code 0.
+- `npm run build` (root) → vite build succeeds: 115 modules, 411.75 kB JS (124.82 kB gzip) + 40.09 kB CSS; the SPA fallback file is copied to `dist/_redirects`, `client/vercel.json` parses to `/(.*) → /index.html`, and the built bundle contains the configured `VITE_API_URL`/`VITE_SOCKET_URL` values. No changes were needed to the client code for deployment.
+- Production boot: `NODE_ENV=production PORT=5060 CLIENT_URL="http://localhost:5173,https://chatwave.vercel.app" node src/server.js` → JSON log lines (production format), `MongoDB connected` (db `test`), `ChatWave API listening on http://localhost:5060` with `clientOrigins: ["http://localhost:5173","https://chatwave.vercel.app"]`; `GET /api/health` → 200 `{"status":"ok"}`; `GET /api/conversations` without a token → 401; CORS preflight from the **second** configured origin → 204 + `Access-Control-Allow-Origin: https://chatwave.vercel.app`; a foreign origin → 200 with **no** CORS header (intended block); the process was stopped after the check.
+- An invalid `CLIENT_URL` (`" , "`) is rejected at boot: `CLIENT_URL must contain at least one origin …`, exit 1.
+- Not verified here: the deployment steps themselves (no Render/Railway/Vercel/Netlify account was used) and all browser-only behaviour — see the phase report.
+
 
 

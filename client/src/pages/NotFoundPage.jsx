@@ -1,7 +1,10 @@
 import { Link } from 'react-router-dom';
 import BrandLogo from '../components/BrandLogo.jsx';
+import { usePageTitle } from '../hooks/usePageTitle.js';
 
 export default function NotFoundPage() {
+  usePageTitle('Page not found');
+
   return (
     <main className="not-found">
       <BrandLogo size={52} />

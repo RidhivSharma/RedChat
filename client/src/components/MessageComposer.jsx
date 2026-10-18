@@ -23,6 +23,11 @@ export default function MessageComposer({
   const [value, setValue] = useState('');
   const [error, setError] = useState('');
   const textareaRef = useRef(null);
+  // Mirrors `value` for the submit path: a second Enter (key repeat) or a
+  // double click must find an already-cleared composer instead of re-sending
+  // the same text with a fresh clientId.
+  const valueRef = useRef('');
+  const justSentRef = useRef(false);
 
   const tooLong = value.length > MAX_MESSAGE_LENGTH;
   const ratio = value.length / MAX_MESSAGE_LENGTH;
@@ -41,6 +46,8 @@ export default function MessageComposer({
 
   function handleChange(event) {
     const next = event.target.value;
+    valueRef.current = next;
+    justSentRef.current = false;
     setValue(next);
     if (error && next.trim()) setError('');
 
@@ -49,10 +56,12 @@ export default function MessageComposer({
   }
 
   function submit() {
-    const text = value.trim();
+    const text = valueRef.current.trim();
 
     if (!text) {
-      setError('Type a message before sending.');
+      // Pressing Enter on an empty composer right after a send is not a
+      // mistake worth an error message — just keep the caret in the box.
+      if (!justSentRef.current) setError('Type a message before sending.');
       textareaRef.current?.focus();
       return;
     }
@@ -61,6 +70,8 @@ export default function MessageComposer({
       return;
     }
 
+    valueRef.current = '';
+    justSentRef.current = true;
     setValue('');
     setError('');
     onStopTyping?.();

@@ -5,8 +5,10 @@ import ConnectionBanner from '../components/ConnectionBanner.jsx';
 import Sidebar from '../components/Sidebar.jsx';
 import { useAuth } from '../hooks/useAuth.js';
 import { useChat } from '../hooks/useChat.js';
+import { usePageTitle } from '../hooks/usePageTitle.js';
 import { useSocket } from '../hooks/useSocket.js';
 import { useToast } from '../hooks/useToast.js';
+import { conversationTitle } from '../utils/conversations.js';
 
 /**
  * The chat screen: sidebar + conversation panel. Below 768px the CSS shows
@@ -18,6 +20,8 @@ export default function ChatPage() {
   const { activeConversation, selectConversation, closeConversation } = useChat();
   const { showToast } = useToast();
   const navigate = useNavigate();
+
+  usePageTitle(activeConversation ? conversationTitle(activeConversation, user?.id) : 'Chats');
 
   const [mobileView, setMobileView] = useState('list');
 

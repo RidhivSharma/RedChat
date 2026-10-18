@@ -35,7 +35,9 @@
   /* Text */
   --color-text: #0f172a;
   --color-text-muted: #5b6b81;
-  --color-text-faint: #8ea0b5;
+  /* Faint text still has to pass WCAG AA (4.5:1) on --color-surface and
+     --color-bg, so it cannot go any lighter than this. */
+  --color-text-faint: #5f6f85;
 
   /* Feedback */
   --color-danger: #dc2626;
@@ -78,7 +80,9 @@
 
   --color-text: #e7eefb;
   --color-text-muted: #9aabc4;
-  --color-text-faint: #6b7d99;
+  /* Same rule as the light theme: faint enough to recede, still ≥ 4.5:1 on
+     both --color-surface and --color-bg. */
+  --color-text-faint: #8194ad;
 
   --color-danger: #f87171;
   --color-danger-contrast: #2b0b0b;
@@ -990,6 +994,9 @@ a:focus-visible {
 .chat-panel__user {
   display: flex;
   flex-direction: column;
+  /* Takes the leftover width; min-width:0 lets a long name truncate instead of
+     pushing the header actions (bell / verify chip / group info) off-screen. */
+  flex: 1 1 auto;
   min-width: 0;
 }
 
@@ -1429,6 +1436,14 @@ a:focus-visible {
   color: var(--color-text-faint);
 }
 
+/* Opt-in desktop notifications — only rendered while permission is 'default',
+   so the browser prompt always follows an explicit click. */
+.sidebar-notify {
+  width: 100%;
+  margin-top: var(--space-3);
+  border: 1px solid var(--color-border);
+}
+
 /* Presence dot on avatars */
 .avatar-wrap {
   position: relative;
@@ -1599,6 +1614,12 @@ a:focus-visible {
 
 .bubble--grouped.bubble--other {
   border-top-left-radius: var(--radius-md);
+}
+
+/* A message that just arrived (window open, not a history page) eases in
+   instead of popping. Reduced-motion users get the final frame instantly. */
+.bubble--enter {
+  animation: bubble-in var(--transition-base) both;
 }
 
 .bubble__text {
@@ -2501,6 +2522,18 @@ a:focus-visible {
   }
 }
 
+/* A newly arrived chat bubble: rises a few pixels while it fades in. */
+@keyframes bubble-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 @keyframes shimmer {
   0% {
     background-position: 100% 50%;
@@ -2554,10 +2587,25 @@ a:focus-visible {
     height: auto;
     min-height: var(--header-height);
     padding: var(--space-2) var(--space-3);
+    gap: var(--space-2);
   }
 
   .chat-back {
     display: inline-flex;
+  }
+
+  /* Three actions (bell, verify chip, group info) + a name must fit on a
+     phone: tighten the gaps and shrink the icon buttons a little. */
+  .chat-panel__actions {
+    gap: var(--space-1);
+  }
+
+  .chat-panel__actions .btn--icon {
+    width: 2.25rem;
+  }
+
+  .encryption-chip {
+    padding: 0.3rem 0.55rem;
   }
 
   .chat-body {
@@ -2605,9 +2653,35 @@ a:focus-visible {
 }
 
 /* --------------------------------------------------------------------------
-   17. Reduced motion
+   16b. Narrow phones (360px and friends) — the header packs three actions
+        (mute bell, verify chip, group info) next to the name, so everything
+        gets a little tighter and the avatar shrinks.
    -------------------------------------------------------------------------- */
 
+@media (max-width: 479px) {
+  .chat-panel__header {
+    padding: var(--space-2);
+  }
+
+  .chat-panel__header .avatar--md {
+    width: 2.25rem;
+    height: 2.25rem;
+    font-size: var(--text-xs);
+  }
+
+  .chat-panel__actions .btn--icon {
+    width: 2rem;
+  }
+
+  .encryption-chip {
+    gap: 0.3rem;
+    padding: 0.25rem 0.5rem;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   17. Reduced motion
+   -------------------------------------------------------------------------- */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

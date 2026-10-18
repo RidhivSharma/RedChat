@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import Avatar from './Avatar.jsx';
 import {
   AlertIcon,
@@ -59,7 +60,7 @@ function StatusIcon({ status, receipt, receiptLabel, onShowInfo }) {
  * The displayed text comes from useDecryptedText — the bubble only ever sees
  * ciphertext plus the key from the auth context.
  */
-export default function MessageBubble({
+function MessageBubble({
   message,
   conversation,
   currentUserId,
@@ -72,6 +73,7 @@ export default function MessageBubble({
   senderColor,
   receipt,
   receiptLabel,
+  isEntering = false,
   onShowInfo,
   onRetry,
   onRequestDelete,
@@ -104,7 +106,7 @@ export default function MessageBubble({
         <div
           className={`bubble ${isOwn ? 'bubble--own' : 'bubble--other'}${
             grouped ? ' bubble--grouped' : ''
-          }${deleted ? ' bubble--deleted' : ''}`}
+          }${deleted ? ' bubble--deleted' : ''}${isEntering ? ' bubble--enter' : ''}`}
         >
           {deleted ? (
             <span className="bubble__text bubble__text--deleted">{deletedLabel}</span>
@@ -160,3 +162,8 @@ export default function MessageBubble({
     </div>
   );
 }
+
+// Memoized: a typing indicator, an unread badge or a composer keystroke must
+// not re-render every bubble in the list. Every prop is either primitive or
+// kept referentially stable by MessageList / ChatWindow.
+export default memo(MessageBubble);

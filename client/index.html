@@ -3,7 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- interactive-widget: on Android/Chrome the keyboard shrinks the layout
+         instead of covering it, so the composer stays visible while typing. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content"
+    />
     <meta
       name="description"
       content="ChatWave — real-time one-on-one and group chat with end-to-end encryption."

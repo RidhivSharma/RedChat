@@ -1,10 +1,12 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import BrandLogo from '../components/BrandLogo.jsx';
 import FormField from '../components/FormField.jsx';
 import { AlertIcon, EyeIcon, EyeOffIcon } from '../components/icons.jsx';
 import { useAuth } from '../hooks/useAuth.js';
+import { usePageTitle } from '../hooks/usePageTitle.js';
 import { useToast } from '../hooks/useToast.js';
+import { consumeSessionExpiredFlag } from '../services/api.js';
 import { firstInvalidField, validateLogin } from '../utils/validation.js';
 
 const EMPTY_VALUES = { username: '', password: '' };
@@ -15,11 +17,23 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  usePageTitle('Sign in');
+
   const [values, setValues] = useState(EMPTY_VALUES);
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  // A forced logout (expired/invalid session) explains itself here, once.
+  const sessionNoticeShownRef = useRef(false);
+  useEffect(() => {
+    if (sessionNoticeShownRef.current) return;
+    sessionNoticeShownRef.current = true;
+    if (consumeSessionExpiredFlag()) {
+      showToast('Your session expired. Please sign in again.', 'info');
+    }
+  }, [showToast]);
 
   const usernameRef = useRef(null);
   const passwordRef = useRef(null);

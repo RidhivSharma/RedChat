@@ -1,6 +1,6 @@
 import { createContext, useEffect, useMemo, useState } from 'react';
-import { clearToken, UNAUTHORIZED_EVENT } from '../services/api.js';
-import { connectSocket, createSocket } from '../services/socket.js';
+import { clearToken, markSessionExpired, UNAUTHORIZED_EVENT } from '../services/api.js';
+import { connectSocket, createSocket, disconnectSocket } from '../services/socket.js';
 import { useAuth } from '../hooks/useAuth.js';
 
 export const SocketContext = createContext(null);
@@ -53,6 +53,7 @@ export function SocketProvider({ children }) {
       const code = error?.data?.code;
       if (code === 'TOKEN_EXPIRED' || code === 'INVALID_TOKEN' || code === 'AUTH_REQUIRED') {
         // Same policy as a REST 401: drop the session and bounce to /login.
+        markSessionExpired();
         clearToken();
         window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT));
         setStatus('disconnected');
@@ -69,12 +70,10 @@ export function SocketProvider({ children }) {
     connectSocket(instance);
 
     return () => {
-      instance.off('connect', handleConnect);
-      instance.off('disconnect', handleDisconnect);
-      instance.off('connect_error', handleConnectError);
       instance.io.off('reconnect_attempt', handleReconnectAttempt);
-      instance.removeAllListeners();
-      instance.disconnect();
+      // Every listener is dropped with the socket: a later session must never
+      // receive events on a stale instance.
+      disconnectSocket(instance);
       setSocket(null);
       setStatus('disconnected');
     };

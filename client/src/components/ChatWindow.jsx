@@ -10,6 +10,11 @@ import MessageInfoDialog from './MessageInfoDialog.jsx';
 import MessageList from './MessageList.jsx';
 import { useChat } from '../hooks/useChat.js';
 import { useToast } from '../hooks/useToast.js';
+import {
+  isConversationMuted,
+  mutedConversationIds,
+  setConversationMuted,
+} from '../utils/notifications.js';
 
 const EMPTY_HISTORY = {
   status: 'loading',
@@ -45,6 +50,9 @@ export default function ChatWindow({ conversation, currentUserId, userName, onBa
   const [infoMessage, setInfoMessage] = useState(null);
   const [groupInfoOpen, setGroupInfoOpen] = useState(false);
   const [verifyOpen, setVerifyOpen] = useState(false);
+  // Desktop notifications are opt-out per conversation and stored in
+  // localStorage; this mirror exists so the header button can re-render.
+  const [mutedIds, setMutedIds] = useState(() => mutedConversationIds());
 
   const activeId = conversation?.id ?? null;
   const encryptionReady = keyStatus === 'ready';
@@ -84,6 +92,26 @@ export default function ChatWindow({ conversation, currentUserId, userName, onBa
     },
     [activeId, notifyAtBottom]
   );
+  // Retry must stay referentially stable: it is passed down through MessageList
+  // into every memoized bubble.
+  const handleRetryMessage = useCallback(
+    (clientId) => {
+      if (activeId) retryMessage(activeId, clientId);
+    },
+    [activeId, retryMessage]
+  );
+
+  const isMuted = activeId ? mutedIds.includes(String(activeId)) : false;
+  const handleToggleMute = useCallback(() => {
+    if (!activeId) return;
+    const next = !isConversationMuted(activeId);
+    setConversationMuted(activeId, next);
+    setMutedIds(mutedConversationIds());
+    showToast(
+      next ? 'Notifications muted for this conversation.' : 'Notifications unmuted.',
+      'success'
+    );
+  }, [activeId, showToast]);
 
   if (!conversation) {
     return (
@@ -124,6 +152,8 @@ export default function ChatWindow({ conversation, currentUserId, userName, onBa
         currentUserId={currentUserId}
         presence={presence}
         typingUserIds={typingUserIds}
+        isMuted={isMuted}
+        onToggleMute={handleToggleMute}
         onBack={onBack}
         onShowGroupInfo={() => setGroupInfoOpen(true)}
         onVerifyEncryption={() => setVerifyOpen(true)}
@@ -136,7 +166,7 @@ export default function ChatWindow({ conversation, currentUserId, userName, onBa
         currentUserId={currentUserId}
         onLoadOlder={handleLoadOlder}
         onReloadHistory={handleReloadHistory}
-        onRetryMessage={(clientId) => retryMessage(conversation.id, clientId)}
+        onRetryMessage={handleRetryMessage}
         onRequestDelete={setPendingDelete}
         onShowInfo={setInfoMessage}
         onBottomChange={handleBottomChange}

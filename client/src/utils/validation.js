@@ -51,7 +51,3 @@ export function validateRegistration(values) {
 export function firstInvalidField(errors) {
   return Object.keys(errors).find((field) => Boolean(errors[field])) ?? null;
 }
-
-export function hasErrors(errors) {
-  return firstInvalidField(errors) !== null;
-}

@@ -25,11 +25,28 @@ const objectIdSchema = z
   .string()
   .regex(/^[0-9a-fA-F]{24}$/, 'must be a 24-character hex id');
 
+/**
+ * Group key envelopes. A wrapped AES key is at most a few hundred base64
+ * characters (an RSA-4096 block is 512 bytes -> 684 base64 chars), so 2000
+ * leaves ample headroom while keeping a single envelope small. The request
+ * body limit (100kb) is the outer bound: a pathologically large "add many
+ * members x many versions" request is rejected by express with 413 before it
+ * ever reaches zod.
+ */
+export const MAX_WRAPPED_KEY_LENGTH = 2000;
+export const MAX_GROUP_KEY_IV_LENGTH = 64;
+
 const groupKeySchema = z.object({
   userId: objectIdSchema,
   version: z.number().int().positive().max(10_000),
-  wrappedKey: z.string().min(1).max(10_000),
-  iv: z.string().min(1).max(MAX_IV_LENGTH),
+  wrappedKey: z
+    .string()
+    .min(1)
+    .max(MAX_WRAPPED_KEY_LENGTH, `wrappedKey must be at most ${MAX_WRAPPED_KEY_LENGTH} characters`),
+  iv: z
+    .string()
+    .min(1)
+    .max(MAX_GROUP_KEY_IV_LENGTH, `iv must be at most ${MAX_GROUP_KEY_IV_LENGTH} characters`),
   wrappedBy: objectIdSchema,
 });
 
@@ -53,8 +70,9 @@ export const createGroupSchema = z.object({
       (ids) => new Set(ids.map((id) => id.toLowerCase())).size === ids.length,
       'memberIds must not contain duplicates'
     ),
-  // Encryption phase data — optional until then.
-  groupKeys: z.array(groupKeySchema).max(200).default([]),
+  // Encryption phase data — optional until then. A new group has one key
+  // version; at most 51 members exist, so 100 envelopes is slack.
+  groupKeys: z.array(groupKeySchema).max(100).default([]),
 });
 
 /** POST /:id/members — group admins adding members. */
@@ -69,7 +87,7 @@ export const addMembersSchema = z.object({
     ),
   // Key envelopes for the newcomers (all existing key versions). Optional so
   // legacy/unencrypted groups can still add members; validated in the handler.
-  groupKeys: z.array(groupKeySchema).max(500).default([]),
+  groupKeys: z.array(groupKeySchema).max(300).default([]),
 });
 
 /**
@@ -82,7 +100,7 @@ export const rotateKeysSchema = z.object({
   groupKeys: z
     .array(groupKeySchema)
     .min(1, 'groupKeys is required')
-    .max(200, 'groupKeys has too many entries'),
+    .max(100, 'groupKeys has too many entries'),
 });
 
 /** PATCH /:id — renaming a group. */

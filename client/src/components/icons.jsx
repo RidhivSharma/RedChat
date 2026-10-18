@@ -252,6 +252,29 @@ export function ClockIcon(props) {
   );
 }
 
+/** Bell — "notifications on" (header mute toggle, enable-notifications button). */
+export function BellIcon(props) {
+  return (
+    <Icon {...props}>
+      <path d="M18 9.5a6 6 0 1 0-12 0c0 4.2-1.2 5.6-1.8 6.2a.9.9 0 0 0 .6 1.5h14.4a.9.9 0 0 0 .6-1.5c-.6-.6-1.8-2-1.8-6.2Z" />
+      <path d="M9.8 20.3a2.4 2.4 0 0 0 4.4 0" />
+    </Icon>
+  );
+}
+
+/** Bell with a slash — the conversation is muted. */
+export function BellOffIcon(props) {
+  return (
+    <Icon {...props}>
+      <path d="M18 9.5c0-1.2-.3-2.4-.9-3.4" />
+      <path d="M15.6 4.1A6 6 0 0 0 6 9.5c0 4.2-1.2 5.6-1.8 6.2a.9.9 0 0 0 .6 1.5h11.6" />
+      <path d="M19.2 17.2h1.2a.9.9 0 0 0 .6-1.5 7.9 7.9 0 0 1-1.5-3.3" />
+      <path d="M9.8 20.3a2.4 2.4 0 0 0 4.4 0" />
+      <path d="M3.5 3.5 20.5 20.5" />
+    </Icon>
+  );
+}
+
 /** Padlock — the end-to-end encryption markers (header chip, unlock screen). */
 export function LockIcon(props) {
   return (

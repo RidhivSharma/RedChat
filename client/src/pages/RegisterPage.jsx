@@ -4,6 +4,7 @@ import BrandLogo from '../components/BrandLogo.jsx';
 import FormField from '../components/FormField.jsx';
 import { AlertIcon, EyeIcon, EyeOffIcon } from '../components/icons.jsx';
 import { useAuth } from '../hooks/useAuth.js';
+import { usePageTitle } from '../hooks/usePageTitle.js';
 import { useToast } from '../hooks/useToast.js';
 import { firstInvalidField, validateRegistration } from '../utils/validation.js';
 
@@ -14,6 +15,8 @@ export default function RegisterPage() {
   const { showToast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
+
+  usePageTitle('Create account');
 
   const [values, setValues] = useState(EMPTY_VALUES);
   const [errors, setErrors] = useState({});

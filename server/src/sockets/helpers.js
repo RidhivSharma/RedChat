@@ -1,4 +1,5 @@
 import { AppError } from '../utils/AppError.js';
+import { logger } from '../utils/logger.js';
 
 /**
  * Validates a socket payload with zod. On failure throws the same
@@ -30,7 +31,8 @@ export function respondError(ack, err, context = 'event') {
   const operational = err instanceof AppError || err?.isOperational === true;
 
   if (!operational) {
-    console.error(`[sockets] ${context} failed:`, err?.message ?? err);
+    // Full error stays server-side; the client only receives the generic ack.
+    logger.error(`socket event failed: ${context}`, { error: err });
   }
 
   const error = operational

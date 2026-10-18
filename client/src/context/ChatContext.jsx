@@ -10,7 +10,13 @@ import {
 } from '../services/socket.js';
 import { createClientId } from '../utils/id.js';
 import { fromServerMessage } from '../utils/messages.js';
+import {
+  isConversationMuted,
+  onOpenConversationRequest,
+  showMessageNotification,
+} from '../utils/notifications.js';
 import { hasReceipt } from '../utils/receipts.js';
+import { setUnreadTitleCount } from '../utils/title.js';
 import {
   KEY_UNAVAILABLE_MESSAGE,
   clearCryptoCaches,
@@ -30,8 +36,16 @@ export const ChatContext = createContext(null);
 /** Messages per history page (the server default is 30 too). */
 export const MESSAGE_PAGE_SIZE = 30;
 
-/** The browser tab title flipped to "(n) …" while there are unread messages. */
-const APP_TITLE = 'ChatWave';
+/**
+ * A send that failed for a *transient* reason (offline, ack timeout) is
+ * retried automatically with exponential backoff before the bubble turns
+ * "failed". Permanent errors (validation, missing key, not a member) fail
+ * immediately.
+ */
+const SEND_RETRY_DELAYS_MS = [1000, 2500, 5000];
+
+/** Socket error codes that are worth retrying. */
+const TRANSIENT_SEND_CODES = new Set(['OFFLINE', 'ACK_TIMEOUT', 'REQUEST_FAILED']);
 
 /**
  * How long a received "is typing" flag survives without a fresh event. The
@@ -198,6 +212,8 @@ export function ChatProvider({ children }) {
   const lastReadUpToRef = useRef(new Map()); // convId → message id already read
   const rotationInFlightRef = useRef(new Set()); // "convId:baseVersion" rotations
   const keyRefreshAtRef = useRef(new Map()); // convId → last key-material refetch (ms)
+  const retryTimersRef = useRef(new Map()); // clientId → pending auto-retry timeout
+  const deliverRef = useRef(null); // latest deliver(), for self-scheduling retries
 
   socketRef.current = socket;
   conversationsRef.current = conversations;
@@ -564,64 +580,94 @@ export function ChatProvider({ children }) {
    * Encrypts and emits one message. There is no plain-text fallback: when the
    * conversation key is unavailable the bubble turns "failed" (the composer is
    * also gated on the key being ready, so this is the network/race path).
+   *
+   * Transient failures (offline, ack timeout) are retried automatically with
+   * exponential backoff while the bubble stays in the "sending" state; only
+   * after the last attempt (or on a permanent error) does it turn "failed".
    */
-  const deliver = useCallback(async (conversationId, clientId, text) => {
-    try {
-      const conversation = conversationsRef.current.find((item) => item.id === conversationId);
-      if (!conversation) {
-        throw new Error('This conversation is not available anymore.');
-      }
+  const deliver = useCallback(
+    async (conversationId, clientId, text, attempt = 0) => {
+      try {
+        const conversation = conversationsRef.current.find((item) => item.id === conversationId);
+        if (!conversation) {
+          throw new Error('This conversation is not available anymore.');
+        }
 
-      const payload = await encryptForConversation(
-        conversation,
-        privateKeyRef.current,
-        meIdRef.current,
-        text
-      );
+        const payload = await encryptForConversation(
+          conversation,
+          privateKeyRef.current,
+          meIdRef.current,
+          text
+        );
 
-      const data = await emitSendMessage(socketRef.current, {
-        conversationId,
-        clientId,
-        ciphertext: payload.ciphertext,
-        iv: payload.iv,
-        keyVersion: payload.keyVersion,
-        encrypted: true,
-      });
+        const data = await emitSendMessage(socketRef.current, {
+          conversationId,
+          clientId,
+          ciphertext: payload.ciphertext,
+          iv: payload.iv,
+          keyVersion: payload.keyVersion,
+          encrypted: true,
+        });
 
-      if (data?.message) {
-        const confirmed = fromServerMessage(data.message);
-        // Remember our own plaintext under the server id as well, so the
-        // confirmed bubble renders from cache without decrypting.
-        rememberMessagePlaintext(conversationId, confirmed, text);
-        setMessagesByConversation((current) => ({
-          ...current,
-          [conversationId]: mergeMessages(current[conversationId] ?? [], [confirmed]),
-        }));
-      } else {
+        if (data?.message) {
+          const confirmed = fromServerMessage(data.message);
+          // Remember our own plaintext under the server id as well, so the
+          // confirmed bubble renders from cache without decrypting.
+          rememberMessagePlaintext(conversationId, confirmed, text);
+          setMessagesByConversation((current) => ({
+            ...current,
+            [conversationId]: mergeMessages(current[conversationId] ?? [], [confirmed]),
+          }));
+        } else {
+          setMessagesByConversation((current) => ({
+            ...current,
+            [conversationId]: updateMessageStatus(current[conversationId] ?? [], clientId, {
+              status: 'sent',
+              error: null,
+            }),
+          }));
+        }
+        return true;
+      } catch (error) {
+        const transient = TRANSIENT_SEND_CODES.has(error?.code);
+        if (transient && attempt < SEND_RETRY_DELAYS_MS.length) {
+          // Stay "sending" and try again after the backoff — no error UI yet.
+          setMessagesByConversation((current) => ({
+            ...current,
+            [conversationId]: updateMessageStatus(current[conversationId] ?? [], clientId, {
+              status: 'sending',
+              error: null,
+            }),
+          }));
+
+          const previous = retryTimersRef.current.get(clientId);
+          if (previous) clearTimeout(previous);
+          const timer = setTimeout(() => {
+            retryTimersRef.current.delete(clientId);
+            deliverRef.current?.(conversationId, clientId, text, attempt + 1);
+          }, SEND_RETRY_DELAYS_MS[attempt]);
+          retryTimersRef.current.set(clientId, timer);
+          return false;
+        }
+
         setMessagesByConversation((current) => ({
           ...current,
           [conversationId]: updateMessageStatus(current[conversationId] ?? [], clientId, {
-            status: 'sent',
-            error: null,
+            status: 'failed',
+            error: error?.message || KEY_UNAVAILABLE_MESSAGE,
           }),
         }));
+        // No key usually means stale member data: refetch so "Retry" can work.
+        if (error?.message === KEY_UNAVAILABLE_MESSAGE) {
+          refreshConversationKeys(conversationId);
+        }
+        return false;
       }
-      return true;
-    } catch (error) {
-      setMessagesByConversation((current) => ({
-        ...current,
-        [conversationId]: updateMessageStatus(current[conversationId] ?? [], clientId, {
-          status: 'failed',
-          error: error?.message || KEY_UNAVAILABLE_MESSAGE,
-        }),
-      }));
-      // No key usually means stale member data: refetch so "Retry" can work.
-      if (error?.message === KEY_UNAVAILABLE_MESSAGE) {
-        refreshConversationKeys(conversationId);
-      }
-      return false;
-    }
-  }, [refreshConversationKeys]);
+    },
+    [refreshConversationKeys]
+  );
+
+  deliverRef.current = deliver;
 
   /** Optimistic send: bubble appears instantly, then ack → sent / failed. */
   const sendMessage = useCallback(
@@ -990,10 +1036,10 @@ export function ChatProvider({ children }) {
         [conversationId]: mergeMessages(current[conversationId] ?? [], [normalized]),
       }));
 
-      const known = conversationsRef.current.some(
+      const knownConversation = conversationsRef.current.find(
         (conversation) => conversation.id === conversationId
       );
-      if (!known) {
+      if (!knownConversation) {
         // A conversation we have never listed (e.g. just created elsewhere).
         refreshConversations({ silent: true });
         return;
@@ -1007,10 +1053,7 @@ export function ChatProvider({ children }) {
       // from a conversation whose key envelope for the sent version is missing)
       // cannot be decrypted with stale data — refetch the conversation now.
       if (normalized.encrypted && !isSystem && !isMine) {
-        const knownConversation = conversationsRef.current.find(
-          (conversation) => conversation.id === conversationId
-        );
-        const senderMember = (knownConversation?.members ?? []).find(
+        const senderMember = (knownConversation.members ?? []).find(
           (member) => member.id === message.sender
         );
         if (!senderMember?.publicKey) refreshConversationKeys(conversationId);
@@ -1018,6 +1061,25 @@ export function ChatProvider({ children }) {
       // A hidden tab (or a conversation that is not open) never counts as
       // "seen": the unread badge must keep growing until the user looks.
       const visible = documentVisibleRef.current;
+
+      // Desktop notification for a message the user cannot see: hidden tab,
+      // not the open conversation, not muted. Content is never included — the
+      // title is the sender's display name, the body is "New message".
+      if (
+        !isMine &&
+        !isSystem &&
+        !visible &&
+        !isActive &&
+        !isConversationMuted(conversationId)
+      ) {
+        const senderMember = (knownConversation.members ?? []).find(
+          (member) => member.id === message.sender
+        );
+        showMessageNotification({
+          senderName: senderMember?.displayName || senderMember?.username || 'New message',
+          conversationId,
+        });
+      }
 
       if (!isMine && !isSystem) {
         // Confirm receipt in one debounced batch: ticks turn "delivered".
@@ -1210,6 +1272,8 @@ export function ChatProvider({ children }) {
     // A session switch starts with a clean receipt slate.
     for (const entry of pendingDeliveredRef.current.values()) clearTimeout(entry.timer);
     pendingDeliveredRef.current.clear();
+    for (const timer of retryTimersRef.current.values()) clearTimeout(timer);
+    retryTimersRef.current.clear();
     lastReadUpToRef.current.clear();
     setRemovedNotice(null);
 
@@ -1347,7 +1411,8 @@ export function ChatProvider({ children }) {
     clearUnreadBadge,
   ]);
 
-  // Browser tab title: "(3) ChatWave" while there is anything unread.
+  // Browser tab title prefix: "(3) …" while there is anything unread. The
+  // base part belongs to the page (usePageTitle) — utils/title.js joins them.
   const totalUnread = useMemo(
     () =>
       conversations.reduce(
@@ -1358,8 +1423,27 @@ export function ChatProvider({ children }) {
   );
 
   useEffect(() => {
-    document.title = totalUnread > 0 ? `(${totalUnread > 99 ? '99+' : totalUnread}) ${APP_TITLE}` : APP_TITLE;
+    setUnreadTitleCount(totalUnread);
   }, [totalUnread]);
+
+  // The unread prefix is chat-session state: never leak it into the login page.
+  useEffect(() => () => setUnreadTitleCount(0), []);
+
+  // Notification clicks (browser Notification) ask to open a conversation.
+  // Unknown conversations are refetched first so the chat layer has them.
+  useEffect(
+    () =>
+      onOpenConversationRequest((event) => {
+        const conversationId = event?.detail?.conversationId;
+        if (!conversationId) return;
+        if (conversationsRef.current.some((conversation) => conversation.id === conversationId)) {
+          selectConversation(conversationId);
+          return;
+        }
+        refreshConversations({ silent: true }).then(() => selectConversation(conversationId));
+      }),
+    [refreshConversations, selectConversation]
+  );
 
   // Reconnect: refetch conversations and the open conversation's latest page so
   // nothing sent while offline is missed. The first connect is skipped — the
@@ -1377,11 +1461,12 @@ export function ChatProvider({ children }) {
   }, [connectionCount, refreshConversations, loadConversation]);
 
   // Stop every outgoing typing flag and flush/cancel pending receipt batches
-  // when the chat layer goes away.
+  // and send-retry timers when the chat layer goes away.
   useEffect(() => {
     const outgoing = outgoingTypingRef.current;
     const timers = typingTimersRef.current;
     const pendingDelivered = pendingDeliveredRef.current;
+    const retryTimers = retryTimersRef.current;
     return () => {
       for (const entry of outgoing.values()) clearTimeout(entry.timer);
       outgoing.clear();
@@ -1389,6 +1474,8 @@ export function ChatProvider({ children }) {
       timers.clear();
       for (const entry of pendingDelivered.values()) clearTimeout(entry.timer);
       pendingDelivered.clear();
+      for (const timer of retryTimers.values()) clearTimeout(timer);
+      retryTimers.clear();
     };
   }, []);
 

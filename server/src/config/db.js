@@ -1,6 +1,7 @@
 import dns from 'node:dns';
 import mongoose from 'mongoose';
 import { env } from './env.js';
+import { logger } from '../utils/logger.js';
 
 // Workaround: some Windows networks advertise a link-local IPv6 DNS server
 // (fe80::...) that Node's c-ares resolver cannot query. Every SRV lookup for a
@@ -12,7 +13,7 @@ const isSrvResolutionFailure = (err) =>
   typeof err?.message === 'string' && err.message.includes('querySrv');
 
 function logConnected(conn) {
-  console.log(`[db] MongoDB connected: host=${conn.connection.host} db=${conn.connection.name}`);
+  logger.info('MongoDB connected', { host: conn.connection.host, db: conn.connection.name });
 }
 
 /**
@@ -22,11 +23,11 @@ function logConnected(conn) {
  */
 export async function connectDB() {
   mongoose.connection.on('disconnected', () => {
-    console.warn('[db] MongoDB disconnected');
+    logger.warn('MongoDB disconnected');
   });
 
   mongoose.connection.on('reconnected', () => {
-    console.log('[db] MongoDB reconnected');
+    logger.info('MongoDB reconnected');
   });
 
   try {
@@ -35,13 +36,14 @@ export async function connectDB() {
     return conn;
   } catch (err) {
     if (!isSrvResolutionFailure(err)) {
-      console.error(`[db] MongoDB connection failed: ${err.message}`);
+      logger.error('MongoDB connection failed', { error: err });
       throw err;
     }
 
-    console.warn(
-      `[db] SRV lookup failed (${err.message}); retrying with DNS servers ${PUBLIC_DNS_FALLBACK.join(', ')}`
-    );
+    logger.warn('SRV lookup failed - retrying with public DNS servers', {
+      dnsServers: PUBLIC_DNS_FALLBACK,
+      error: err,
+    });
     dns.setServers(PUBLIC_DNS_FALLBACK);
 
     try {
@@ -49,7 +51,7 @@ export async function connectDB() {
       logConnected(conn);
       return conn;
     } catch (retryErr) {
-      console.error(`[db] MongoDB connection failed: ${retryErr.message}`);
+      logger.error('MongoDB connection failed after DNS retry', { error: retryErr });
       throw retryErr;
     }
   }

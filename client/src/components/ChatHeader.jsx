@@ -1,5 +1,5 @@
 import Avatar from './Avatar.jsx';
-import { ArrowLeftIcon, LockIcon, UsersIcon } from './icons.jsx';
+import { ArrowLeftIcon, BellIcon, BellOffIcon, LockIcon, UsersIcon } from './icons.jsx';
 import { conversationAvatar, conversationTitle, otherMember } from '../utils/conversations.js';
 import { formatLastSeen } from '../utils/time.js';
 
@@ -19,13 +19,16 @@ function typingLabel(typingUserIds, conversation) {
  * name and a status line — "online", "last seen …", "N members" or
  * "Alex is typing…". Groups get a button that opens the info panel. The lock
  * chip states that the conversation is end-to-end encrypted and opens the
- * "Verify encryption" dialog.
+ * "Verify encryption" dialog. The bell mutes desktop notifications for this
+ * conversation only (a browser-local preference).
  */
 export default function ChatHeader({
   conversation,
   currentUserId,
   presence,
   typingUserIds,
+  isMuted = false,
+  onToggleMute,
   onBack,
   onShowGroupInfo,
   onVerifyEncryption,
@@ -80,8 +83,24 @@ export default function ChatHeader({
       <div className="chat-panel__actions">
         <button
           type="button"
+          className="btn btn--ghost btn--icon"
+          onClick={onToggleMute}
+          title={
+            isMuted
+              ? 'Notifications muted for this conversation — click to unmute'
+              : 'Mute notifications for this conversation'
+          }
+          aria-pressed={isMuted}
+          aria-label={isMuted ? 'Unmute notifications' : 'Mute notifications'}
+        >
+          {isMuted ? <BellOffIcon size={18} /> : <BellIcon size={18} />}
+        </button>
+
+        <button
+          type="button"
           className="encryption-chip"
           onClick={onVerifyEncryption}
+          aria-label="Messages are end-to-end encrypted. Verify encryption."
           title="Messages are end-to-end encrypted. Click to verify."
         >
           <LockIcon size={13} />
