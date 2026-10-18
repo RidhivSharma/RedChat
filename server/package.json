@@ -4,7 +4,7 @@
   "private": true,
   "description": "ChatWave API server (Express + Socket.io + Mongoose)",
   "type": "module",
-  "main": "src/server.js",
+  "main": "index.js",
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",

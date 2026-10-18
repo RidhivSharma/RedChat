@@ -349,5 +349,79 @@ All notable changes are grouped by phase.
 - An invalid `CLIENT_URL` (`" , "`) is rejected at boot: `CLIENT_URL must contain at least one origin …`, exit 1.
 - Not verified here: the deployment steps themselves (no Render/Railway/Vercel/Netlify account was used) and all browser-only behaviour — see the phase report.
 
+## Phase 12 — Deployment: everything on Vercel (2026-10-18)
+
+Vercel's WebSocket support for Functions (public beta, Fluid compute) made an
+all-Vercel deployment possible: the client becomes a static Vite build and the
+Express + Socket.io API becomes one Vercel Function. The repository now ships
+the two pieces that needed changing, everything else already fit (env-driven
+URLs, comma-separated `CLIENT_URL`, the SPA rewrite in `client/vercel.json`).
+
+**Server**
+- `server/index.js` (new) — the serverless entry Vercel deploys: it connects to
+  MongoDB on cold start, creates the HTTP server from `src/app.js`, attaches
+  Socket.io and **default-exports the `http.Server`** (the pattern Vercel's
+  WebSocket beta documents for Node servers, and what routes both `/api/*`
+  REST traffic and the `/socket.io/*` WebSocket upgrade through one Function).
+  No `listen()`, no presence-heartbeat interval, no signal handlers — those
+  belong to the long-lived `src/server.js`, which is untouched and still what
+  `npm start` / `npm run dev` / Render / Railway use.
+- `server/package.json` — `"main": "index.js"` so the entrypoint is pinned.
+  Vercel's zero-config Express detection scans `app`, `index`, `server`,
+  `src/app`, `src/index`, `src/server` (first match wins) and the newer backend
+  resolver honours `package.json#main` first; both now resolve to `index.js`.
+  This matters: `src/app.js` also matches and exports the bare Express app, so
+  a wrong pick would silently drop Socket.io. (`src/server.js` deliberately
+  carries no `express` import, so it is not a candidate of the older scan.)
+
+**Client**
+- `src/services/socket.js` — the socket now forces `transports: ['websocket']`.
+  Vercel's Functions cannot do Socket.io's HTTP long-polling (the connection is
+  pinned to one instance), and the WebSocket transport works everywhere else
+  too (local dev, Render/Railway). Comment added at the option.
+
+**Docs**
+- `README.md` — Deployment section rewritten: two Vercel projects from one repo
+  (`server` + `client` root directories), the exact env vars per project, the
+  order of operations (API first, then client, then `CLIENT_URL` + API
+  redeploy), the Vercel caveats (300 s connection ceiling on Hobby with
+  automatic client reconnect, per-instance rooms/presence without a shared
+  adapter, websocket-only transport, memory billed while a connection is open)
+  and the unchanged Render/Railway alternative. Folder structure updated
+  (`server/index.js`), troubleshooting updated (the old "WebSockets cannot work
+  on Vercel" note replaced by the beta's real behaviour).
+
+**Verified**
+- `npm run build` (root) → vite build succeeds: 115 modules, 411.77 kB JS
+  (124.83 kB gzip) + 40.09 kB CSS.
+- `npm test` (root) → server **67/67 pass**, client **24/24 pass** (no
+  behavioural change).
+- Throwaway entry smoke on the real Vercel entry (`server/index.js` imported
+  with `NODE_ENV=production`, given its own listener like the platform does) →
+  **10/10 checks**: default export is an `http.Server`; Socket.io is attached
+  (`/socket.io`); `GET /api/health` → 200 `{"status":"ok"}`; a protected route
+  without a token → 401 `AUTH_REQUIRED`; register → 201; a `socket.io-client`
+  with `transports: ['websocket']` completes the handshake on the websocket
+  transport and receives `presence:snapshot`; a bad token is rejected with
+  `INVALID_TOKEN`; the throwaway user was removed afterwards.
+
+**Notes / assumptions**
+- The Vercel deployment itself could not be executed here (no Vercel account)
+  and WebSockets on Vercel are in public beta. What is verified is the entry
+  contract the platform consumes; the routing/upgrade behaviour after deploy
+  must be confirmed with the steps in the README (health check, then a chat
+  between two browsers).
+- Accepted trade-offs of the all-Vercel route (documented in the README): a
+  socket is closed when its function reaches 300 s (Hobby maximum) and the
+  client reconnects — a short "Connecting…" banner every ~5 minutes; a
+  reconnecting client may land on a different function instance, so presence /
+  rooms join state is per instance until it reconnects (all durable state is in
+  MongoDB, a refresh always re-syncs); long-polling is unavailable.
+- Command limits/regions are unchanged; the API stays a single region (default)
+  which is also what keeps a small demo on one warm instance.
+- The pre-existing Windows-only `querySrv` DNS retry in `src/config/db.js`
+  still logs a warning per test file locally; it does not affect Vercel
+  (working DNS) and is unrelated to this phase.
+
 
 

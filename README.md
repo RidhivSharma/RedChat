@@ -288,6 +288,8 @@ Chat App/
 ├── AGENTS.md                 # project rules
 │
 ├── server/
+│   ├── index.js              # Vercel (serverless) entry — exports the Express + Socket.io
+│   │                         # HTTP server Vercel drives; see Deployment
 │   ├── src/
 │   │   ├── config/           # env.js (zod-validated env), db.js (Mongoose connect)
 │   │   ├── controllers/      # auth, user, conversation, message handlers
@@ -298,7 +300,7 @@ Chat App/
 │   │   │                     # receipts, typing, conversations, rooms, helpers, rateLimit
 │   │   ├── utils/            # AppError, logger, messageService, receiptService, serialize, …
 │   │   ├── app.js            # Express app (helmet, CORS, routes, error shape)
-│   │   └── server.js         # HTTP + Socket.io bootstrap, graceful shutdown
+│   │   └── server.js         # long-lived entry: HTTP + Socket.io, listen, graceful shutdown
 │   ├── tests/                # node:test integration suite (+ helpers/)
 │   └── .env.example
 │
@@ -467,90 +469,105 @@ Common ack error codes: `VALIDATION_ERROR`, `NOT_A_MEMBER`, `NOT_GROUP_ADMIN`,
 
 ## Deployment
 
-Two services: the **API/socket server** (needs a long-lived process) and the
-**static client**.
+ChatWave deploys **entirely on Vercel**: two projects from this one repository —
+the React client (static build) and the Express + Socket.io API (a single Vercel
+Function on Fluid compute; WebSockets are a public beta feature there) — plus a
+MongoDB Atlas database. A classic long-lived host for the API works too, see
+[Alternative: Render / Railway](#alternative-render--railway).
 
-> **The Socket.io server cannot run on Vercel or Netlify.** Their serverless
-> functions do not support long-lived WebSocket connections, which ChatWave
-> relies on for messaging, typing, presence and receipts. Host the server on a
-> platform with persistent processes — **Render** or **Railway** — and only the
-> client on Vercel/Netlify.
+Vercel caveats, straight from its serverless model — they are the price of
+"everything on Vercel":
 
-### 1. Server on Render (or Railway)
+- **A socket connection closes when its function hits the maximum duration**
+  (300 s on the free Hobby plan). The client reconnects automatically and
+  re-syncs state, so expect a brief "Connecting…" banner roughly every five
+  minutes. No data is lost — messages live in MongoDB.
+- **A new connection can land on any function instance.** Socket rooms,
+  presence and typing are per-instance, in memory (no shared adapter — the
+  project may not add packages, see `AGENTS.md`). With a handful of users on
+  the default single region, clients normally share the one warm instance; if
+  realtime ever stalls for someone, a refresh re-syncs everything from the
+  database.
+- **WebSocket transport only.** Vercel cannot do Socket.io's HTTP long-polling,
+  so `client/src/services/socket.js` forces `transports: ['websocket']` — fine
+  on every host.
+- The **REST API is unaffected** (ordinary serverless requests). An open socket
+  keeps its function instance's memory provisioned for billing; idle CPU is
+  free.
 
-1. Push the repository to GitHub and create a **Web Service** from it.
-2. Settings (monorepo):
-   - **Root directory:** repository root
-   - **Build command:** `npm install --prefix server`
-   - **Start command:** `npm --prefix server start` (or `npm start` from the
-     repo root, which runs the same command)
-   - **Health check path:** `/api/health`
-3. Environment variables:
+### 0. Database — MongoDB Atlas
+
+1. Create a free cluster at <https://cloud.mongodb.com>.
+2. *Database Access* → add a user with a strong password.
+3. *Network Access* → allow `0.0.0.0/0`: Vercel has no stable outbound IP, so
+   restricting this to your laptop IP breaks the deployed API.
+4. *Connect → Drivers* → copy the `mongodb+srv://…` string and add the database
+   name: `…/chatwave`. Percent-encode special characters in the password
+   (`@` → `%40`, `:` → `%3A`, `/` → `%2F`, `?` → `%3F`, `#` → `%23`); `env.js`
+   also fixes an unencoded `@` in memory at boot and warns.
+
+### 1. API project — Vercel
+
+1. Push the repository to GitHub, then import it at <https://vercel.com/new>.
+2. **Root Directory:** `server` (important — without it Vercel would look for the
+   Express app in the repository root). Vercel detects Express ("Backends on
+   Vercel") and deploys `server/index.js` as a single Function; leave the build
+   settings alone.
+3. Environment variables (Production + Preview):
 
    | Variable | Value |
    | -------- | ----- |
    | `MONGODB_URI` | your Atlas connection string **with** the database name (`…/chatwave`) |
    | `JWT_SECRET` | long random string (32+ chars, different from dev) |
    | `JWT_EXPIRES_IN` | `7d` (or your preference) |
-   | `CLIENT_URL` | the deployed client URL, e.g. `https://chatwave.vercel.app` (no trailing slash; comma-separate extra origins such as preview URLs) |
-   | `NODE_ENV` | `production` |
+   | `CLIENT_URL` | the deployed client origin, e.g. `https://chatwave-client.vercel.app` — fill this in after step 2 (comma-separate extras) |
    | `REQUIRE_E2EE` | `true` |
 
-   Do **not** set `PORT` — Render/Railway inject it and the server binds
-   `process.env.PORT`.
-4. Deploy and check `https://<your-service>/api/health` → `{"status":"ok"}`.
-   Render terminates TLS at its proxy; the app already calls
-   `app.set("trust proxy", 1)` so rate limiting and socket IPs stay correct
-   behind it.
+   Do **not** set `PORT` (there is no listener to bind) or `NODE_ENV` (Vercel
+   sets `production`).
+4. Deploy and open `https://<api-project>.vercel.app/api/health` →
+   `{"status":"ok"}`. On first use the endpoint may take a second (cold start).
 
-Railway is equivalent: build `npm install --prefix server`, start
-`npm --prefix server start`, same variables. Both support WebSockets out of the
-box.
+### 2. Client project — Vercel
 
-### 2. Client on Vercel (or Netlify)
-
-1. Create a project from the same repository.
-2. **Vercel:** set **Root Directory** to `client`. Framework preset *Vite*,
-   build command `npm run build`, output directory `dist`. `client/vercel.json`
-   rewrites every path to `/index.html` so client-side routes like `/login`
-   work on refresh.
-   **Netlify:** base directory `client`, build command `npm run build`, publish
-   directory `client/dist`. `client/public/_redirects` (`/* /index.html 200`)
-   is copied into the build and handles SPA routing.
-3. Environment variables (set them **before** the build — Vite inlines them):
+1. **New Project** → same repository → **Root Directory:** `client`. Framework
+   preset *Vite*, build command `npm run build`, output directory `dist`.
+   `client/vercel.json` rewrites every path to `/index.html` so client-side
+   routes like `/login` work on refresh.
+2. Environment variables — set them **before** the build (Vite inlines them):
 
    | Variable | Value |
    | -------- | ----- |
-   | `VITE_API_URL` | server URL **+ `/api`**, e.g. `https://chatwave-api.onrender.com/api` |
-   | `VITE_SOCKET_URL` | server URL **without** `/api`, e.g. `https://chatwave-api.onrender.com` |
+   | `VITE_API_URL` | API URL **+ `/api`**, e.g. `https://chatwave-api.vercel.app/api` |
+   | `VITE_SOCKET_URL` | API URL **without** `/api`, e.g. `https://chatwave-api.vercel.app` |
 
-4. Deploy, then go back to the server’s `CLIENT_URL` and make sure it matches
-   the deployed client origin exactly (scheme + host, no trailing slash). Changing
-   either side requires a redeploy/restart of that side.
+3. Deploy and open the client.
 
-### 3. MongoDB Atlas network access
+### 3. Close the CORS loop
 
-In Atlas → *Network Access*, allow the deployment host’s IPs. Free/starter
-plans (Render, Railway, Vercel) do not give a stable outbound IP, so the common
-choice is `0.0.0.0/0` (allow from anywhere) while keeping a strong database
-password — or the platform’s static IP add-on if you have one. Restricting to
-your own laptop IP will break the deployed server with a connection timeout.
+Put the client origin into the API project's `CLIENT_URL` (exact origin: scheme
++ host, no trailing slash; comma-separate extra origins such as a Vercel preview
+URL), then **redeploy the API project** — environment values are applied per
+deployment. Both Express CORS and the Socket.io handshake read this list.
 
-### 4. Free-tier caveats
+### Alternative: Render / Railway
 
-- **Run a single server instance.** Presence and socket rooms live in memory
-  (single process by design — see `server/src/sockets/presence.js`), so scaling
-  to several instances without a shared adapter (e.g. Redis) would split
-  presence and room membership. One instance serves the whole app fine.
-- Free instances **sleep** after inactivity. The first request (and the first
-  socket connection) can take 30–60 s while the service wakes — the client shows
-  the connection banner and reconnects automatically, but a chat sent during the
-  cold start may take an extra moment to appear. Open the client once before
-  demonstrating.
-- Sleeping also drops sockets: presence briefly shows everyone offline and comes
-  back when clients reconnect.
-- Free tiers have bandwidth/hours limits — fine for a demo, check the quota for
-  anything else.
+Prefer a long-lived process (no 300 s connection cap, no instance split)? Deploy
+`/server` there instead of Vercel — the repository needs no changes for it:
+
+| Setting | Value |
+| ------- | ----- |
+| Root directory | repository root |
+| Build command | `npm install --prefix server` |
+| Start command | `npm --prefix server start` (runs `server/src/server.js`) |
+| Health check path | `/api/health` |
+| Environment | same variables as step 1, **plus** `NODE_ENV=production`; do not set `PORT` |
+
+Both hosts support WebSockets out of the box and use the server's presence
+heartbeat and graceful shutdown. Keep the client on Vercel and point
+`VITE_API_URL` / `VITE_SOCKET_URL` at the new host, then redeploy the client.
+Free Render instances sleep after inactivity: the first request can take 30–60 s
+while the service wakes (the client shows its reconnecting banner).
 
 ## Troubleshooting
 
@@ -592,13 +609,19 @@ present" — the API might even log a 200.
 ### Socket not connecting (banner stays "Connecting…" / "Offline")
 
 - `VITE_SOCKET_URL` must be the server **origin only** — no `/api`, no trailing
-  slash (`https://chatwave-api.onrender.com`). `VITE_API_URL` is the one with
+  slash (`https://chatwave-api.vercel.app`). `VITE_API_URL` is the one with
   `/api`.
 - `VITE_*` variables are baked in at build time: after changing them you must
   rebuild/redeploy the client (restart `npm run dev` locally).
 - Check the server is reachable: open `/api/health` from the same browser.
-- **Hosted on Vercel/Netlify/serverless?** WebSockets cannot work there — move
-  the server to Render/Railway (see [Deployment](#deployment)).
+- **Deployed on Vercel?** WebSockets are a public beta there and require the
+  websocket transport — `client/src/services/socket.js` already forces it, and
+  long-polling is unavailable. Connections are also cut when the function hits
+  its maximum duration (300 s on Hobby) and reconnect immediately; a brief
+  banner every few minutes is expected, not a bug.
+- **`connect_error` right after the first request?** On Vercel the very first
+  socket attempt can race the API's cold start (MongoDB connection + instance
+  boot). The client keeps retrying with backoff.
 - A `connect_error` with `TOKEN_EXPIRED`/`INVALID_TOKEN` means the session is
   over — log in again. The client handles this by itself.
 - Behind a custom reverse proxy, enable WebSocket upgrade headers

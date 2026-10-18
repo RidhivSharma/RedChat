@@ -39,6 +39,11 @@ export function createSocket(token) {
   return io(SOCKET_URL, {
     auth: { token },
     autoConnect: false,
+    // Vercel Functions (public beta) only upgrade websocket connections —
+    // HTTP long-polling cannot work in their serverless model, so the
+    // websocket transport is forced. This works on every host (local dev,
+    // Render/Railway, Vercel): long-polling fallback is the only thing lost.
+    transports: ['websocket'],
     reconnection: true,
     reconnectionAttempts: Infinity,
     reconnectionDelay: 800,
