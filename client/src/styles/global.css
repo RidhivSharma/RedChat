@@ -917,6 +917,10 @@ a:focus-visible {
 .chat-layout {
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  /* One row, clamped to the shell height. Without minmax(0, 1fr) the implicit
+     auto row grows with the message list, so .chat-body never becomes a scroll
+     container and the whole page grows instead. */
+  grid-template-rows: minmax(0, 1fr);
   flex: 1;
   min-height: 0;
   background: var(--color-bg);
@@ -926,6 +930,9 @@ a:focus-visible {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  /* Grid items default to min-height: auto (= content height); 0 keeps the
+     pane inside its row so .chat-sidebar__list is the thing that scrolls. */
+  min-height: 0;
   background: var(--color-surface);
   border-right: 1px solid var(--color-border);
 }
@@ -978,6 +985,9 @@ a:focus-visible {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  /* Same as the sidebar: pin the panel to its grid row so .chat-body-wrap gets
+     a real height and the message list scrolls internally instead of the page. */
+  min-height: 0;
   background: var(--color-bg);
 }
 

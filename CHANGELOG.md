@@ -504,5 +504,33 @@ because none can be (see below).
   config; renaming them means updating the `services` keys and the two service
   rewrites.
 
+## Fix — Desktop chat scroll (2026-10-18)
+
+**Bug:** on desktop, once a conversation got long, the whole page grew taller
+instead of the message list scrolling, and the mouse wheel did nothing over the
+chat.
+
+**Cause:** `.chat-layout` declared only `grid-template-columns`, so its single
+**implicit row was `auto`** and grew to the message list's full content height.
+That left `.chat-panel` (and `.chat-body` inside it) unconstrained, so
+`overflow-y: auto` never engaged — the list expanded, the shell overflowed
+`100dvh`, and the document became the scroll container (unreachable under the
+cursor).
+
+**Changed**
+- `client/src/styles/global.css`:
+  - `.chat-layout`: added `grid-template-rows: minmax(0, 1fr)` — the row is now
+    clamped to the shell height instead of hugging the content.
+  - `.chat-panel` and `.chat-sidebar`: added `min-height: 0` to override the
+    grid items' automatic content minimum, so both panes stay inside their row
+    and `.chat-body` / `.chat-sidebar__list` are the scroll containers.
+  - No markup or behaviour changes; `overscroll-behavior: contain` on
+    `.chat-body` now works as intended (wheel stays in the chat at the ends).
+
+**Verified**
+- `npm run build --prefix client` → 115 modules, 40.15 kB CSS, built OK.
+- Browser-level scroll behaviour could not be exercised here (no browser in this
+  environment); see the manual checklist for the visual pass.
+
 
 
