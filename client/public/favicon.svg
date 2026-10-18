@@ -1,12 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <defs>
-    <linearGradient id="chatwave" x1="6" y1="8" x2="58" y2="58" gradientUnits="userSpaceOnUse">
+    <linearGradient id="redchat" x1="6" y1="8" x2="58" y2="58" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#14b8a6" />
       <stop offset="1" stop-color="#4f46e5" />
     </linearGradient>
   </defs>
-  <rect x="6" y="8" width="52" height="42" rx="14" fill="url(#chatwave)" />
-  <path d="M20 48 12 58 32 50Z" fill="url(#chatwave)" />
+  <rect x="6" y="8" width="52" height="42" rx="14" fill="url(#redchat)" />
+  <path d="M20 48 12 58 32 50Z" fill="url(#redchat)" />
   <path
     d="M19 33c3.5-7 7-7 10.5 0s7 7 10.5 0"
     fill="none"

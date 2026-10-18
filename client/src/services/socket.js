@@ -1,5 +1,5 @@
 // ============================================================================
-// ChatWave Socket.io client — the single place realtime code lives (client
+// RedChat Socket.io client — the single place realtime code lives (client
 // rule). It:
 //   - creates the authenticated socket (auth: { token }, same JWT as REST)
 //   - owns the connect/disconnect lifecycle (auto-reconnect is on)
@@ -25,7 +25,7 @@ const SOCKET_URL = configuredSocketUrl
 
 if (import.meta.env.DEV && !configuredSocketUrl) {
   console.warn(
-    '[ChatWave] VITE_SOCKET_URL is not set — realtime falls back to http://localhost:5000. ' +
+    '[RedChat] VITE_SOCKET_URL is not set — realtime falls back to http://localhost:5000. ' +
       'Copy client/.env.example to client/.env and restart the dev server.'
   );
 }

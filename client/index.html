@@ -11,16 +11,16 @@
     />
     <meta
       name="description"
-      content="ChatWave — real-time one-on-one and group chat with end-to-end encryption."
+      content="RedChat — real-time one-on-one and group chat with end-to-end encryption."
     />
     <meta name="theme-color" content="#0d9488" />
-    <title>ChatWave</title>
+    <title>RedChat</title>
     <script>
       // Apply the saved theme before first paint so the app never flashes the
       // wrong colors. useTheme() keeps localStorage and the attribute in sync.
       (function () {
         try {
-          var theme = localStorage.getItem('chatwave.theme')
+          var theme = localStorage.getItem('redchat.theme')
           if (theme !== 'light' && theme !== 'dark') {
             theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
           }

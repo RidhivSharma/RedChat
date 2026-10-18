@@ -45,14 +45,14 @@ export async function keyFingerprint(publicKeyA, publicKeyB) {
 /**
  * Fingerprint of ONE public key (used in the group verification view, where
  * members compare each other's keys pairwise instead of as a pair). The
- * "chatwave-key|" prefix domain-separates it from keyFingerprint() so the two
+ * "redchat-key|" prefix domain-separates it from keyFingerprint() so the two
  * values can never be confused for one another.
  */
 export async function fingerprintOf(publicKey) {
   const canonical = canonicalPublicKey(publicKey);
   const digest = await globalThis.crypto.subtle.digest(
     'SHA-256',
-    utf8ToBytes(`chatwave-key|${canonical}`)
+    utf8ToBytes(`redchat-key|${canonical}`)
   );
   return groupHex(toHex(new Uint8Array(digest)));
 }

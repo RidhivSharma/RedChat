@@ -1,8 +1,8 @@
 {
-  "name": "chatwave-server",
+  "name": "redchat-server",
   "version": "1.0.0",
   "private": true,
-  "description": "ChatWave API server (Express + Socket.io + Mongoose)",
+  "description": "RedChat API server (Express + Socket.io + Mongoose)",
   "type": "module",
   "main": "index.js",
   "scripts": {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
-export const THEME_STORAGE_KEY = 'chatwave.theme';
+export const THEME_STORAGE_KEY = 'redchat.theme';
 
 export function getPreferredTheme() {
   try {

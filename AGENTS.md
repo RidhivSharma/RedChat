@@ -1,10 +1,10 @@
-# AGENTS.md — Project Rules for ChatWave
+# AGENTS.md — Project Rules for RedChat
 
 These rules are binding for the entire project. Follow them for every phase and every task.
 
 ## PROJECT
 
-Real-Time Chat App **"ChatWave"** with one-on-one chat, group chat, online status, typing indicators, read receipts and end-to-end encryption.
+Real-Time Chat App **"RedChat"** with one-on-one chat, group chat, online status, typing indicators, read receipts and end-to-end encryption.
 
 ## STRICT STACK
 

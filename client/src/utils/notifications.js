@@ -7,10 +7,10 @@
 //     "Enable notifications" (never on page load),
 //   - a muted conversation never produces notifications.
 
-const MUTED_STORAGE_KEY = 'chatwave.mutedConversations';
+const MUTED_STORAGE_KEY = 'redchat.mutedConversations';
 
 /** Custom event a notification click fires to open a conversation. */
-export const OPEN_CONVERSATION_EVENT = 'chatwave:open-conversation';
+export const OPEN_CONVERSATION_EVENT = 'redchat:open-conversation';
 
 export function notificationsSupported() {
   return typeof window !== 'undefined' && 'Notification' in window;
@@ -46,7 +46,7 @@ export function showMessageNotification({ senderName, conversationId }) {
   try {
     const notification = new Notification(senderName || 'New message', {
       body: 'New message',
-      tag: `chatwave-conversation-${conversationId}`,
+      tag: `redchat-conversation-${conversationId}`,
       // Re-using the tag replaces the previous notification of that
       // conversation instead of stacking one per message.
       renotify: false,

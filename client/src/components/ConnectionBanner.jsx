@@ -22,7 +22,7 @@ export default function ConnectionBanner({ status }) {
       ) : (
         <WifiOffIcon size={15} />
       )}
-      <span>{connecting ? 'Connecting to ChatWave…' : 'You are offline — reconnecting…'}</span>
+      <span>{connecting ? 'Connecting to RedChat…' : 'You are offline — reconnecting…'}</span>
     </div>
   );
 }

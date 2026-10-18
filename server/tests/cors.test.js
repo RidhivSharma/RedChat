@@ -6,14 +6,14 @@ import './helpers/setup.js';
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
 
-process.env.CLIENT_URL = ' http://localhost:5173 , https://chatwave.example/ , https://preview.example';
+process.env.CLIENT_URL = ' http://localhost:5173 , https://redchat.example/ , https://preview.example';
 
 const { clientOrigins, env, parseClientOrigins } = await import('../src/config/env.js');
 const { default: app } = await import('../src/app.js');
 const { attachSockets } = await import('../src/sockets/index.js');
 const { startTestServer, stopTestServer } = await import('./helpers/harness.js');
 
-const ALLOWED = 'https://chatwave.example';
+const ALLOWED = 'https://redchat.example';
 const ALLOWED_SECOND = 'https://preview.example';
 const BLOCKED = 'https://evil.example';
 
@@ -40,7 +40,7 @@ test('parseClientOrigins trims, strips trailing slashes and drops empties', () =
 
 test('env normalizes CLIENT_URL into a list of origins', () => {
   assert.deepEqual(clientOrigins, ['http://localhost:5173', ALLOWED, ALLOWED_SECOND]);
-  assert.equal(env.CLIENT_URL, 'http://localhost:5173,https://chatwave.example,https://preview.example');
+  assert.equal(env.CLIENT_URL, 'http://localhost:5173,https://redchat.example,https://preview.example');
 });
 
 test('Express CORS allows every configured origin and nothing else', async () => {

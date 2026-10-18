@@ -1,5 +1,5 @@
 // ============================================================================
-// ChatWave crypto module — single entry point.
+// RedChat crypto module — single entry point.
 //
 // Everything end-to-end encryption related lives here and ONLY here (no crypto
 // libraries — the browser Web Crypto API `crypto.subtle` is the sole runtime).

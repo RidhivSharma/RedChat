@@ -1,5 +1,5 @@
 // ============================================================================
-// ChatWave API client.
+// RedChat API client.
 //
 // Every HTTP call in the app goes through this module (client rule). It:
 //   - reads the base URL from VITE_API_URL (see .env.example; must include /api)
@@ -36,18 +36,18 @@ const API_URL = (readApiUrlEnv() || '/api').replace(/\/+$/, '');
 // client/.env is obvious (see .env.example).
 if (isDevBuild() && !readApiUrlEnv()) {
   console.warn(
-    '[ChatWave] VITE_API_URL is not set — API calls go to the relative "/api" path and will fail in dev. ' +
+    '[RedChat] VITE_API_URL is not set — API calls go to the relative "/api" path and will fail in dev. ' +
       'Copy client/.env.example to client/.env and restart the dev server.'
   );
 }
 
-export const TOKEN_STORAGE_KEY = 'chatwave.token';
-export const UNAUTHORIZED_EVENT = 'chatwave:unauthorized';
+export const TOKEN_STORAGE_KEY = 'redchat.token';
+export const UNAUTHORIZED_EVENT = 'redchat:unauthorized';
 
 // Set right before a forced logout so the login page can explain what
 // happened ("Your session expired…"). sessionStorage (not localStorage) so it
 // does not leak into a later, unrelated visit.
-const SESSION_EXPIRED_KEY = 'chatwave.sessionExpired';
+const SESSION_EXPIRED_KEY = 'redchat.sessionExpired';
 
 /** Marks the session as force-expired (401 / socket auth failure). */
 export function markSessionExpired() {

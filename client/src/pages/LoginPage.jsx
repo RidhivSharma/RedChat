@@ -163,7 +163,7 @@ export default function LoginPage() {
         </form>
 
         <p className="auth-card__footer">
-          New to ChatWave? <Link to="/register">Create an account</Link>
+          New to RedChat? <Link to="/register">Create an account</Link>
         </p>
       </section>
     </main>

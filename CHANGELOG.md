@@ -2,6 +2,16 @@
 
 All notable changes are grouped by phase.
 
+## Rename — RedChat (2026-10-18)
+
+**Changed**
+- App renamed from **ChatWave** to **RedChat**: UI copy, page `<title>`/meta, root + client + server package names (`redchat`, `redchat-client`, `redchat-server`), server log lines, README/QA docs and examples.
+- Storage keys now use the `redchat` prefix (`redchat.token`, `redchat.theme`, `redchat.mutedConversations`, `redchat:unauthorized`, `redchat:open-conversation`, notification tags) and the crypto key store is `redchat-crypto`; the fingerprint domain-separation prefix is now `redchat-key|`.
+
+**Notes**
+- One-time effects of the rename: users are signed out (token key changed), theme/mute preferences reset, and the cached non-extractable private key is rebuilt by unlocking once with the backup password. Safety-number fingerprints change (nothing else in the E2EE format changed).
+- The MongoDB database name is unchanged; renaming it in `MONGODB_URI` is optional and would require migrating data.
+
 ## Phase 1 — Backend foundation (2026-10-17)
 
 **Root workspace**
@@ -24,7 +34,7 @@ All notable changes are grouped by phase.
 - Model smoke test: all indexes built; username lowercasing; duplicate username / duplicate sender+clientId / duplicate directKey rejected (E11000); sparse directKey allows multiple groups; all temp data removed.
 
 **Known findings**
-- Real MONGODB_URI: password contains an unencoded `@`; no database name in the path (driver defaults to db `test`). `env.js` normalizes the credentials in memory each boot (warning). Fixing the .env (`%40`, add `/chatwave`) is recommended — it was intentionally not touched.
+- Real MONGODB_URI: password contains an unencoded `@`; no database name in the path (driver defaults to db `test`). `env.js` normalizes the credentials in memory each boot (warning). Fixing the .env (`%40`, add `/redchat`) is recommended — it was intentionally not touched.
 - nodemon's transitive dev dependency `braces` has advisory GHSA-vfj7-8cjw-p6xm with no patched release; dev-only, accepted.
 
 ## Phase 2 — Auth & user API (2026-10-17)
@@ -41,7 +51,7 @@ All notable changes are grouped by phase.
 - `server/tests/` — node:test suite (12 tests) + `npm test` (glob `tests/**/*.test.js`); test DB derived from MONGODB_URI as `<db>_test`, dropped before/after run with a non-test-database guard.
 
 **Verified**
-- `npm test`: 12/12 pass on Atlas `chatwave_test` (created + dropped). Covers register, validation, duplicate, login ok/fail, missing/invalid/expired token, me, search (incl. regex escaping), get-by-id, patch-me.
+- `npm test`: 12/12 pass on Atlas `redchat_test` (created + dropped). Covers register, validation, duplicate, login ok/fail, missing/invalid/expired token, me, search (incl. regex escaping), get-by-id, patch-me.
 - Boot via root `npm run start`; `/api/health` 200; protected routes 401 without token; live rate limit check: 20×401 then `429 RATE_LIMITED`.
 - `REQUIRE_E2EE=true` branch separately checked (keys required when enabled).
 
@@ -51,17 +61,17 @@ All notable changes are grouped by phase.
 - Scaffolded with the create-vite `react` template, then pruned to the allowed packages: `react`, `react-dom`, `react-router-dom`, `socket.io-client` (+ `vite` and `@vitejs/plugin-react` as dev tooling). Template demo files, `@types/*`, oxlint and its config were removed; `dev` / `build` / `preview` scripts kept.
 - `client/.env.example` — `VITE_API_URL=http://localhost:5000/api` and `VITE_SOCKET_URL=http://localhost:5000`. No real `.env` was created or touched.
 - `src/styles/global.css` — design system: light/dark tokens on `[data-theme]` (+ `color-scheme`), teal/indigo brand, spacing / radius / shadow / type scales. Reusable classes: `.btn` (primary, ghost, danger, icon, sm/lg/block), `.input` (+ invalid, `.input-group` for the password reveal), `.field`, `.modal` (+ backdrop), `.avatar` (sm/md/lg), `.badge` (+ variants), `.toast`, `.skeleton` (+ text/circle/avatar), `.spinner`, chat bubbles (`.bubble--own` right/primary, `.bubble--other` left/neutral), empty state, 404 page, responsive rules below 768px, reduced-motion, focus rings.
-- `src/services/api.js` — the single fetch wrapper: reads `VITE_API_URL`, attaches `Authorization: Bearer` from localStorage, parses `{ error: { message, code } }` into `ApiError`, maps network failures, and on a 401 (except `/auth/login` / `/auth/register`) clears the token, fires `chatwave:unauthorized` and redirects to `/login`.
-- `src/context/AuthContext.jsx` + `src/hooks/useAuth.js` — exposes `{ user, token, loading, login, register, logout }`; token persisted under `chatwave.token`; session restored through `GET /api/auth/me` on refresh; mirrors API 401s into state.
+- `src/services/api.js` — the single fetch wrapper: reads `VITE_API_URL`, attaches `Authorization: Bearer` from localStorage, parses `{ error: { message, code } }` into `ApiError`, maps network failures, and on a 401 (except `/auth/login` / `/auth/register`) clears the token, fires `redchat:unauthorized` and redirects to `/login`.
+- `src/context/AuthContext.jsx` + `src/hooks/useAuth.js` — exposes `{ user, token, loading, login, register, logout }`; token persisted under `redchat.token`; session restored through `GET /api/auth/me` on refresh; mirrors API 401s into state.
 - `src/context/ToastContext.jsx` + `src/hooks/useToast.js` + `components/Toast.jsx` — `showToast(message, type, { duration })` with success/error/info variants, auto-dismiss, manual dismiss, max 4 visible, aria `status`/`alert`.
 - `components/`: `Avatar` (initials on the server `avatarColor`, luminance-aware text color, sm/md/lg), `BrandLogo` (teal→indigo mark), `FormField` (label + inline error/hint wired with `aria-describedby`), `EmptyState`, `FullPageSpinner`, `ThemeToggle`, `ProtectedRoute` / `PublicRoute` wrappers, inline SVG icon set (`icons.jsx`).
-- `hooks/useTheme.js` — light/dark toggle stored as `chatwave.theme` in localStorage; the inline script in `index.html` applies it before first paint (no theme flash).
+- `hooks/useTheme.js` — light/dark toggle stored as `redchat.theme` in localStorage; the inline script in `index.html` applies it before first paint (no theme flash).
 - `pages/`: `LoginPage` + `RegisterPage` (centered card; client validation mirrors the server zod rules with identical messages; blur validation; show/hide password toggle; submit spinner; server error banner; success toast; redirect back to the originally requested page), `ChatPage` (placeholder shell: sidebar + conversation panel, header with avatar/displayName/@username, theme toggle, logout, empty states), `NotFoundPage` (404).
 - Routing (`App.jsx`): `PublicRoute` → `/login`, `/register`; `ProtectedRoute` → `/`; `*` → 404. Full-page spinner while the session is being restored.
 
 **Verified**
 - Root `npm run build` → vite build succeeds: 45 modules, `dist` ≈ 280 kB JS (88 kB gzip) + 18 kB CSS.
-- Runtime smoke on the built app (`vite preview`): `GET /` 200 with ChatWave title, `#root`, theme bootstrap script; hashed JS + CSS assets served 200; SPA fallback (`/login`) serves `index.html` — 9/9 checks.
+- Runtime smoke on the built app (`vite preview`): `GET /` 200 with RedChat title, `#root`, theme bootstrap script; hashed JS + CSS assets served 200; SPA fallback (`/login`) serves `index.html` — 9/9 checks.
 - Dev-server smoke (`vite dev`): `GET /` 200, `main.jsx` / `App.jsx` transform and serve, `global.css` serves both theme token sets — 5/5 checks.
 
 **Fix — signup 404 (2026-10-17)**
@@ -91,10 +101,10 @@ All notable changes are grouped by phase.
 - `src/utils/directKey.js` — canonical sorted-id key builder.
 - `src/middleware/validate.js` — new `validateQuery` (zod) storing into `req.validatedQuery` (Express 5 `req.query` is a getter).
 - Index: `Message { conversationId, sender, 'readBy.user' }` for unread counts; `Conversation.name` now `maxlength: 50`.
-- Tests: `tests/conversations.test.js` (9 tests) + `tests/messageService.e2ee.test.js` (2 tests) and a shared `tests/helpers/harness.js`; `npm test` now uses `--test-concurrency=1` so the files sharing `chatwave_test` run sequentially.
+- Tests: `tests/conversations.test.js` (9 tests) + `tests/messageService.e2ee.test.js` (2 tests) and a shared `tests/helpers/harness.js`; `npm test` now uses `--test-concurrency=1` so the files sharing `redchat_test` run sequentially.
 
 **Verified**
-- `npm test`: 23/23 pass on Atlas `chatwave_test` (12 auth + 9 conversations + 2 E2EE gate) — direct conversation found-or-created (same id from both sides, single row), self/unknown/invalid rejection, group rules + admins + key envelopes, list order + per-user unread counts, non-member 403s (list/send/single), a 3-page cursor walk (id and ISO cursors, exact clientId sequences, `hasMore`/`nextBefore`), dedupe (`200` same id, one row, `409` on reuse), delete-for-everyone (sender-only, DB cleared, hidden in history, idempotent), payload/auth validation, REQUIRE_E2EE rejection + acceptance.
+- `npm test`: 23/23 pass on Atlas `redchat_test` (12 auth + 9 conversations + 2 E2EE gate) — direct conversation found-or-created (same id from both sides, single row), self/unknown/invalid rejection, group rules + admins + key envelopes, list order + per-user unread counts, non-member 403s (list/send/single), a 3-page cursor walk (id and ISO cursors, exact clientId sequences, `hasMore`/`nextBefore`), dedupe (`200` same id, one row, `409` on reuse), delete-for-everyone (sender-only, DB cleared, hidden in history, idempotent), payload/auth validation, REQUIRE_E2EE rejection + acceptance.
 - Boot check: the running server (nodemon) reloaded the new code and connected to MongoDB; `/api/health` → 200; `/api/conversations` and `DELETE /api/messages/:id` → `401 AUTH_REQUIRED` (routers live, auth enforced).
 
 **Notes / assumptions**
@@ -119,7 +129,7 @@ All notable changes are grouped by phase.
 - Tests: `tests/sockets.test.js` (9 integration tests using `socket.io-client`) — auth rejections, presence snapshot/updates/offline+`lastSeen`, `message:send` delivery + ack + delivered marking, payload/membership validation, typing relay + self-exclusion, `message:delete` broadcast, `conversation:new` + room join, per-socket rate limiting. `socket.io-client` was added as a **dev-only** dependency of the server to drive the tests (the same package is already allowed for the client).
 
 **Verified**
-- `npm test`: 32/32 pass on Atlas `chatwave_test` (12 auth + 9 conversations + 2 E2EE gate + 9 sockets).
+- `npm test`: 32/32 pass on Atlas `redchat_test` (12 auth + 9 conversations + 2 E2EE gate + 9 sockets).
 - Live boot: the running server (nodemon) reloaded with Socket.io attached — `/api/health` → 200 and a real socket client without a token is rejected with `connect_error` "Authentication required" / `AUTH_REQUIRED`.
 - `npm audit --omit=dev`: 0 vulnerabilities (the 3 high advisories are the pre-existing dev-only nodemon → chokidar → braces chain).
 
@@ -154,7 +164,7 @@ All notable changes are grouped by phase.
 
 **Verified**
 - `npm run build` (root) → vite build succeeds: 93 modules, `dist` 355.9 kB JS (110.7 kB gzip) + 30 kB CSS.
-- `npm test` (server) → 35/35 pass on Atlas `chatwave_test` (12 auth + 3 plaintext contract + 9 conversations + 2 E2EE gate + 9 sockets).
+- `npm test` (server) → 35/35 pass on Atlas `redchat_test` (12 auth + 3 plaintext contract + 9 conversations + 2 E2EE gate + 9 sockets).
 - Live smoke against the running API on `:5000` (throwaway users, cleaned up afterwards): 15/15 checks — both sockets authenticate by handshake JWT, presence snapshot/update, `message:send` with `iv: ''` acked and broadcast, stored shape keeps `encrypted:false`, typing start/stop relayed, `unreadCount` 1 for the recipient, history returns the plaintext message, `message:delete` broadcast and hidden from history.
 - Boot: `npm run start` → MongoDB connected + Socket.io attached; `/api/health` 200. Client dev server (Vite, `:5173`) serves `/` (200) and transforms all 24 new/changed modules without errors.
 
@@ -177,7 +187,7 @@ All notable changes are grouped by phase.
 - `src/services/socket.js` — `sendMessageDelivered` / `sendMessageRead` (acked, 5 s timeout).
 - `src/context/ChatContext.jsx` — receipts state (`deliveredTo` / `readBy` kept on every message), handlers for `message:status` and `messages:read`, a debounced `message:delivered` batch (300 ms) for every incoming message, and an optimistic receipt write on a successful read ack.
 - Read receipts: emits `message:read` only while the conversation is open AND the tab is visible (Page Visibility API) AND the list is scrolled near the bottom (debounced 400 ms, re-armed by new messages, idempotent on reconnect). A hidden tab no longer counts messages in its open conversation as seen — the sidebar badge keeps growing until the user looks. Reads clear the badge optimistically; `messages:read` from another device clears it too.
-- The browser tab title shows the total unread count ("(3) ChatWave", capped at "99+").
+- The browser tab title shows the total unread count ("(3) RedChat", capped at "99+").
 - `src/utils/receipts.js` (new) — tick state (one grey = sent, two grey = delivered, two blue = read; in groups delivered/read only when ALL other members have it) and per-member details for the info view. `src/components/MessageBubble.jsx` renders the ticks as a button (title = "Seen by N of M" / "Delivered to …"), `src/components/MessageInfoDialog.jsx` (new) lists who delivered and who read with exact times (opened from the ticks). `MessageList` reports its scroll position (`onBottomChange`) and passes receipt props; `ChatWindow` hosts the dialog.
 - `src/utils/time.js` gained `formatDateTime`; `icons.jsx` gained single/double tick icons; `global.css` gained the blue read-tick token (`--color-receipt-read`, light + dark), tick button styles and the message-info dialog styles.
 
@@ -185,7 +195,7 @@ All notable changes are grouped by phase.
 - `server/tests/receipts.test.js` (6 tests, node:test): connect-time catch-up marks pending messages delivered and emits `message:status` to the room; `message:delivered` marks specific messages, is idempotent and notifies the room; `message:read` marks everything up to the point (including a read-implies-delivered case with a "lost" delivery mark); unread counts follow the read point in `GET /api/conversations` (2 → read one → 1); non-members, unknown ids, foreign read points and invalid payloads are rejected; in a group one member's read leaves the others unread.
 
 **Verified**
-- `npm test` (server) → 41/41 pass on Atlas `chatwave_test` (12 auth + 3 plaintext contract + 9 conversations + 2 E2EE gate + 9 sockets + 6 receipts).
+- `npm test` (server) → 41/41 pass on Atlas `redchat_test` (12 auth + 3 plaintext contract + 9 conversations + 2 E2EE gate + 9 sockets + 6 receipts).
 - `npm run build` (root) → vite build succeeds: 95 modules, `dist` 363.4 kB JS (112.8 kB gzip) + 31.4 kB CSS.
 - Live smoke against the running API on `:5000` (throwaway users, cleaned up afterwards): 14/14 checks — send while the recipient is offline (nothing delivered, REST unread 2), connect-time catch-up emits `message:status` for both messages, `message:read` acks `readCount: 2` and emits `messages:read`, the DB holds delivered+read rows, REST unread drops to 0, history exposes `readBy`, and a repeated `message:delivered` is idempotent (`delivered: 0`).
 - Tick rules sanity-checked against `client/src/utils/receipts.js` (direct + group: partial delivery stays "sent", partially read stays "delivered", only all-member read turns blue; labels and per-member details).
@@ -217,7 +227,7 @@ All notable changes are grouped by phase.
 - `server/tests/groups.test.js` (5 tests, node:test): non-admin cannot add members (403 `NOT_GROUP_ADMIN`) while the admin's add returns the updated conversation, emits `conversation:updated` to the room and a personalized `conversation:new` to the newcomer, stores the "X added Y" system message, and leaves the newcomer's unread count at 0; rename + promote are admin-only and idempotent (double promote adds no second system message); leaving as the last admin promotes the earliest remaining member ("X is now an admin"); a removed member stops receiving `message:new`, cannot send (403) and no longer sees the conversation; the last member leaving deletes the conversation and its messages.
 
 **Verified**
-- `npm test` (server) → 46/46 pass on Atlas `chatwave_test` (12 auth + 3 plaintext contract + 9 conversations + 2 E2EE gate + 9 sockets + 6 receipts + 5 groups).
+- `npm test` (server) → 46/46 pass on Atlas `redchat_test` (12 auth + 3 plaintext contract + 9 conversations + 2 E2EE gate + 9 sockets + 6 receipts + 5 groups).
 - `npm run build` (root) → vite build succeeds: 97 modules, `dist` 382.65 kB JS (116.08 kB gzip) + 36.97 kB CSS.
 - Live smoke against the running API on `:5000` (throwaway users, cleaned up afterwards): create group 201, non-admin add → 403 `NOT_GROUP_ADMIN`, admin rename 200, the system message "Smoke Alice renamed the group to “Smoke Crew 2”" is stored and returned by history, self-leave → 200 `{ left: true }`, the leaver gets 403 `NOT_A_MEMBER` afterwards and the member list no longer contains them.
 - Boot: `npm run start` → MongoDB connected (db=test) + Socket.io attached; `/api/health` 200; `POST /api/conversations/:id/members` without a token → 401.
@@ -256,7 +266,7 @@ All notable changes are grouped by phase.
 - `server/tests/conversations.test.js`: fixed `addMembers requires every existing version` — it tried to "add" a user who was already a member, so the server rightly rejected it for a different reason; it now registers a real newcomer.
 
 **Verified**
-- Client `npm test` → 14/14. Server `npm test` → 55/55 on Atlas `chatwave_test` (49 existing + 6 new). Client `npm run build` → 111 modules, 404 kB JS (122 kB gzip) + 39 kB CSS.
+- Client `npm test` → 14/14. Server `npm test` → 55/55 on Atlas `redchat_test` (49 existing + 6 new). Client `npm run build` → 111 modules, 404 kB JS (122 kB gzip) + 39 kB CSS.
 - Live end-to-end smoke (throwaway script, since deleted) with the real client crypto against the real Express app on `REQUIRE_E2EE=true`: register with keys → login on a "new device" and restore the key from the backup (the restored key is non-extractable) → direct message the server never sees in clear and the partner decrypts from history → group created with wrapped v1 keys → member removed → admin rotates to v2 → new message uses `keyVersion` 2 → history decrypts across both versions; the removed member gets 403.
 - Boot: `node src/server.js` (PORT 5055, because 5000 was already in use) → MongoDB connected, Socket.io attached, `/api/health` 200, `/api/conversations` without token 401.
 
@@ -307,7 +317,7 @@ All notable changes are grouped by phase.
 - Composer: a `valueRef`/`justSentRef` guard stops a second Enter or a double click from re-sending the same text with a fresh `clientId`; a stray Enter right after sending no longer shows a validation error.
 
 **Client — UX, accessibility & robustness**
-- Per-conversation mute: bell button in the chat header (`aria-pressed`, unmute/mute label + tooltip), stored under `chatwave.mutedConversations`; a muted conversation never raises a desktop notification.
+- Per-conversation mute: bell button in the chat header (`aria-pressed`, unmute/mute label + tooltip), stored under `redchat.mutedConversations`; a muted conversation never raises a desktop notification.
 - Opt-in desktop notifications: "Enable notifications" in the sidebar footer appears only while permission is `default`, so the browser prompt always follows an explicit click. Notifications are limited to a hidden tab, a non-open conversation and a non-muted conversation, and carry only the sender's display name + "New message" — never text. Clicking one focuses the window and opens that conversation.
 - `utils/title.js` + `hooks/usePageTitle.js` own `document.title` (page name + `(n)` unread prefix, "99+" cap) so the chat layer and the pages can no longer overwrite each other.
 - Contrast: `--color-text-faint` raised to `#5f6f85` (light) / `#8194ad` (dark) so faint text, hints, timestamps and placeholders reach WCAG AA (≥ 4.5:1) on every surface in both themes.
@@ -315,9 +325,9 @@ All notable changes are grouped by phase.
 - Dead code removed: `resetPageTitle` (`utils/title.js`), `hasErrors` (`utils/validation.js`); `SocketContext` now tears the session socket down through `disconnectSocket()` (drops every listener) instead of re-implementing it.
 
 **Verified**
-- Server `npm test`: **63/63 pass** on Atlas `chatwave_test` (12 auth + 3 plaintext contract + 12 conversations + 6 E2EE enforcement + 2 message-service E2EE + 6 receipts + 5 groups + 8 security + 9 sockets/presence).
+- Server `npm test`: **63/63 pass** on Atlas `redchat_test` (12 auth + 3 plaintext contract + 12 conversations + 6 E2EE enforcement + 2 message-service E2EE + 6 receipts + 5 groups + 8 security + 9 sockets/presence).
 - Client `npm test`: **24/24 pass**; `npm run build`: 115 modules, 411.75 kB JS (124.82 kB gzip) + 40.09 kB CSS, **no warnings**.
-- Boot + shutdown smoke (temporary script, since deleted) on `PORT=5001` (5000 was occupied by the running dev server): MongoDB connected, `ChatWave API listening`, `/api/health` → `200 {"status":"ok"}`, unknown route → `404 NOT_FOUND`, oversized body → `413 PAYLOAD_TOO_LARGE`, then `SIGTERM` → `received SIGTERM - shutting down gracefully` → `shutdown complete`, **exit code 0** with no libuv assertion. The same script against the occupied port produced exactly one log line (`port 5000 is already in use - is another ChatWave server still running?`) and exit 1.
+- Boot + shutdown smoke (temporary script, since deleted) on `PORT=5001` (5000 was occupied by the running dev server): MongoDB connected, `RedChat API listening`, `/api/health` → `200 {"status":"ok"}`, unknown route → `404 NOT_FOUND`, oversized body → `413 PAYLOAD_TOO_LARGE`, then `SIGTERM` → `received SIGTERM - shutting down gracefully` → `shutdown complete`, **exit code 0** with no libuv assertion. The same script against the occupied port produced exactly one log line (`port 5000 is already in use - is another RedChat server still running?`) and exit 1.
 
 **Notes / assumptions**
 - The old `Message` index from earlier phases is still present in existing databases; Mongoose creates the new one on boot but never drops the old. Dropping `{ conversationId: 1, createdAt: -1 }` manually is optional (it is now redundant, not harmful).
@@ -343,9 +353,9 @@ All notable changes are grouped by phase.
 
 **Verified**
 - `node --test tests/cors.test.js` → 4/4 pass.
-- `npm test` (server) → **67/67 pass** on Atlas `chatwave_test` (63 existing + 4 new CORS tests). `npm test` (client) → **24/24 pass**. Root `npm test` (server then client) → exit code 0.
+- `npm test` (server) → **67/67 pass** on Atlas `redchat_test` (63 existing + 4 new CORS tests). `npm test` (client) → **24/24 pass**. Root `npm test` (server then client) → exit code 0.
 - `npm run build` (root) → vite build succeeds: 115 modules, 411.75 kB JS (124.82 kB gzip) + 40.09 kB CSS; the SPA fallback file is copied to `dist/_redirects`, `client/vercel.json` parses to `/(.*) → /index.html`, and the built bundle contains the configured `VITE_API_URL`/`VITE_SOCKET_URL` values. No changes were needed to the client code for deployment.
-- Production boot: `NODE_ENV=production PORT=5060 CLIENT_URL="http://localhost:5173,https://chatwave.vercel.app" node src/server.js` → JSON log lines (production format), `MongoDB connected` (db `test`), `ChatWave API listening on http://localhost:5060` with `clientOrigins: ["http://localhost:5173","https://chatwave.vercel.app"]`; `GET /api/health` → 200 `{"status":"ok"}`; `GET /api/conversations` without a token → 401; CORS preflight from the **second** configured origin → 204 + `Access-Control-Allow-Origin: https://chatwave.vercel.app`; a foreign origin → 200 with **no** CORS header (intended block); the process was stopped after the check.
+- Production boot: `NODE_ENV=production PORT=5060 CLIENT_URL="http://localhost:5173,https://redchat.vercel.app" node src/server.js` → JSON log lines (production format), `MongoDB connected` (db `test`), `RedChat API listening on http://localhost:5060` with `clientOrigins: ["http://localhost:5173","https://redchat.vercel.app"]`; `GET /api/health` → 200 `{"status":"ok"}`; `GET /api/conversations` without a token → 401; CORS preflight from the **second** configured origin → 204 + `Access-Control-Allow-Origin: https://redchat.vercel.app`; a foreign origin → 200 with **no** CORS header (intended block); the process was stopped after the check.
 - An invalid `CLIENT_URL` (`" , "`) is rejected at boot: `CLIENT_URL must contain at least one origin …`, exit 1.
 - Not verified here: the deployment steps themselves (no Render/Railway/Vercel/Netlify account was used) and all browser-only behaviour — see the phase report.
 
@@ -444,7 +454,7 @@ because none can be (see below).
   source of truth.
 - **No bindings, deliberately:** a binding injects an internal URL into
   server-side functions at runtime only — it never reaches a static browser
-  build, and it does not resolve during builds. The ChatWave client is a Vite
+  build, and it does not resolve during builds. The RedChat client is a Vite
   SPA running in the visitor's browser, so it reaches the API through the public
   rewrites; the API makes no outbound calls at all (no `fetch`/`http.request` in
   `server/src`), so there is no service-to-service call to bind.
@@ -483,7 +493,7 @@ because none can be (see below).
   with a throwaway subset validator → **valid**, including `services`, the
   service-targeted `rewrites` destinations and the service object keys.
 - Server boot: `PORT=5099 node src/server.js` → `MongoDB connected`,
-  `ChatWave API listening on http://localhost:5099`, `GET /api/health` → 200
+  `RedChat API listening on http://localhost:5099`, `GET /api/health` → 200
   `{"status":"ok"}`, `GET /api/conversations` without a token → 401. (The
   pre-existing `MONGODB_URI` warnings — unencoded `@`, no database name —
   appeared exactly as before.)

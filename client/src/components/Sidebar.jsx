@@ -65,7 +65,7 @@ export default function Sidebar({ user, onSelectConversation, onLogout }) {
     <aside className="chat-sidebar" aria-label="Conversations">
       <header className="chat-sidebar__header">
         <BrandLogo size={30} />
-        <span className="chat-sidebar__brand">ChatWave</span>
+        <span className="chat-sidebar__brand">RedChat</span>
         <div className="chat-sidebar__header-actions">
           <ThemeToggle theme={theme} onToggle={toggleTheme} />
         </div>
@@ -170,7 +170,7 @@ export default function Sidebar({ user, onSelectConversation, onLogout }) {
         <p className="sidebar-note">
           {keyStatus === 'unavailable'
             ? '🔒 Encryption keys are unavailable on this device — sending is disabled.'
-            : '🔒 Messages are end-to-end encrypted. ChatWave cannot read them.'}
+            : '🔒 Messages are end-to-end encrypted. RedChat cannot read them.'}
         </p>
 
         {notifyPermission === 'default' ? (

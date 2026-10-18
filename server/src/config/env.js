@@ -72,7 +72,7 @@ const envSchema = z.object({
   MONGODB_URI: z
     .string()
     .trim()
-    .min(1, 'MONGODB_URI is required (e.g. mongodb://127.0.0.1:27017/chatwave)')
+    .min(1, 'MONGODB_URI is required (e.g. mongodb://127.0.0.1:27017/redchat)')
     .refine(
       (value) => value.startsWith('mongodb://') || value.startsWith('mongodb+srv://'),
       'MONGODB_URI must start with mongodb:// or mongodb+srv://'
@@ -119,7 +119,7 @@ function warnIfNoDatabaseName(uri) {
   if (slash === -1 || !rest.slice(slash + 1)) {
     console.warn(
       '[env] MONGODB_URI has no database name - MongoDB will use its default "test" database. ' +
-        'Add one to the connection string (e.g. .../chatwave).'
+        'Add one to the connection string (e.g. .../redchat).'
     );
   }
 }

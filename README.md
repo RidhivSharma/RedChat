@@ -1,4 +1,4 @@
-# ChatWave
+# RedChat
 
 Real-time chat app with one-on-one and group chat, online status, typing
 indicators, read receipts and end-to-end encryption.
@@ -21,7 +21,7 @@ browser Web Crypto API (no crypto libraries on the client).
 
 ## Overview
 
-ChatWave is a full-stack, end-to-end encrypted messenger. People register an
+RedChat is a full-stack, end-to-end encrypted messenger. People register an
 account (which generates an ECDH P-256 key pair **in the browser**), find each
 other by username, and chat one-on-one or in groups. Messages are encrypted with
 AES-GCM-256 before they leave the browser, so the server stores and relays only
@@ -332,10 +332,10 @@ variables reach the browser bundle — never put secrets in `client/.env`.
 | -------- | -------- | ------- | ----------- |
 | `PORT` | no | `5000` | HTTP/Socket.io port. The server binds this port (`process.env.PORT`) — deployment platforms inject it. |
 | `NODE_ENV` | no | `development` | `development` \| `production` \| `test`. Enables JSON logging, safe error messages and the production shutdown path. |
-| `MONGODB_URI` | **yes** | `mongodb+srv://user:pass@cluster/chatwave` | MongoDB connection string **including the database name**. Percent-encode special characters in the password (`@` → `%40`). |
+| `MONGODB_URI` | **yes** | `mongodb+srv://user:pass@cluster/redchat` | MongoDB connection string **including the database name**. Percent-encode special characters in the password (`@` → `%40`). |
 | `JWT_SECRET` | **yes** | 32+ random chars | Signing secret for access tokens. Use a long random value; changing it logs everyone out. |
 | `JWT_EXPIRES_IN` | no | `7d` | Token lifetime (any `jsonwebtoken` duration). |
-| `CLIENT_URL` | no | `http://localhost:5173` | Origin(s) allowed by CORS, for **both** Express and Socket.io. Comma-separated list supported (`http://localhost:5173,https://chatwave.vercel.app`). Exact origin, no trailing slash. |
+| `CLIENT_URL` | no | `http://localhost:5173` | Origin(s) allowed by CORS, for **both** Express and Socket.io. Comma-separated list supported (`http://localhost:5173,https://redchat.vercel.app`). Exact origin, no trailing slash. |
 | `REQUIRE_E2EE` | no | `false` | `true` makes the server reject plaintext messages and registrations without key material. Set to `true` in production. |
 
 ### Client (`client/.env`)
@@ -366,10 +366,10 @@ bundle, not read at runtime.
 3. *Network Access* → add your current IP address (or `0.0.0.0/0` during
    development; see [Deployment](#deployment) for hosts).
 4. *Connect → Drivers* → copy the `mongodb+srv://…` string and add a database
-   name to the path, e.g. `mongodb+srv://user:pass@cluster0.abcde.mongodb.net/chatwave`.
+   name to the path, e.g. `mongodb+srv://user:pass@cluster0.abcde.mongodb.net/redchat`.
 
 **Local MongoDB:** install MongoDB Community Server and use
-`mongodb://127.0.0.1:27017/chatwave` — no network access rules involved.
+`mongodb://127.0.0.1:27017/redchat` — no network access rules involved.
 
 ### 2. Install
 
@@ -427,7 +427,7 @@ npm test --prefix client    # crypto + API-contract unit tests (no database)
 
 - **Server tests** (`server/tests/`) run against a real MongoDB. They derive a
   separate database from `MONGODB_URI` by appending `_test` (e.g.
-  `chatwave` → `chatwave_test`), create and then **drop** it on every run, and
+  `redchat` → `redchat_test`), create and then **drop** it on every run, and
   refuse to drop anything that does not end in `_test`. Point them at a local
   MongoDB or an Atlas cluster you do not mind wiping. Suites cover auth,
   conversations, message service, socket auth/presence/messaging, receipts,
@@ -475,7 +475,7 @@ Common ack error codes: `VALIDATION_ERROR`, `NOT_A_MEMBER`, `NOT_GROUP_ADMIN`,
 
 ## Deployment
 
-ChatWave deploys as **one Vercel project with two services** (Vercel Services),
+RedChat deploys as **one Vercel project with two services** (Vercel Services),
 built from this one repository: the React client (static Vite build) and the
 Express + Socket.io API (a Vercel Function on Fluid compute; WebSockets are a
 public beta feature there) — plus a MongoDB Atlas database. The root
@@ -497,7 +497,7 @@ Everything is served from **one domain**, split by the top-level rewrites in
 Both services are **public**, because both are reached by the **browser**. There
 are deliberately **no service bindings**: a binding injects an internal URL into
 server-side functions at runtime only (never into a static build), and the
-ChatWave client is browser code — it cannot resolve or use an internal address.
+RedChat client is browser code — it cannot resolve or use an internal address.
 The API never calls the client either, so no service-to-service call exists to
 bind.
 
@@ -534,7 +534,7 @@ Vercel caveats, straight from its serverless model — they are the price of
 3. *Network Access* → allow `0.0.0.0/0`: Vercel has no stable outbound IP, so
    restricting this to your laptop IP breaks the deployed API.
 4. *Connect → Drivers* → copy the `mongodb+srv://…` string and add the database
-   name: `…/chatwave`. Percent-encode special characters in the password
+   name: `…/redchat`. Percent-encode special characters in the password
    (`@` → `%40`, `:` → `%3A`, `/` → `%2F`, `?` → `%3F`, `#` → `%23`); `env.js`
    also fixes an unencoded `@` in memory at boot and warns.
 
@@ -549,7 +549,7 @@ Vercel caveats, straight from its serverless model — they are the price of
 
    | Variable | Value |
    | -------- | ----- |
-   | `MONGODB_URI` | your Atlas connection string **with** the database name (`…/chatwave`) |
+   | `MONGODB_URI` | your Atlas connection string **with** the database name (`…/redchat`) |
    | `JWT_SECRET` | long random string (32+ chars, different from dev) |
    | `JWT_EXPIRES_IN` | `7d` (or your preference) |
    | `CLIENT_URL` | optional — only for origins other than this deployment, see step 3 |
@@ -613,7 +613,7 @@ while the service wakes (the client shows its reconnecting banner).
   `?` → `%3F`, `#` → `%23`. The app fixes an unencoded `@` in memory and warns,
   but fix the `.env` properly.
 - **No database name in the path.** `mongodb+srv://host/` makes the driver use a
-  database literally named `test` (the server warns about this). Add `/chatwave`.
+  database literally named `test` (the server warns about this). Add `/redchat`.
 - **Atlas Network Access.** Your IP (or `0.0.0.0/0` for deployed hosts) must be
   allowed; otherwise the connection times out after 10 s.
 - **`querySrv … ECONNREFUSED` on Windows.** Some networks advertise a link-local
@@ -636,7 +636,7 @@ present" — the API might even log a 200.
 - Vite falls back to `5174`/`5175` when 5173 is busy — add those origins (a
   comma-separated list is supported) or free the port.
 - Multiple clients (local + deployed)? List them all:
-  `CLIENT_URL=http://localhost:5173,https://chatwave.vercel.app`.
+  `CLIENT_URL=http://localhost:5173,https://redchat.vercel.app`.
 - Restart the server after changing `CLIENT_URL`; it is read at boot for both
   Express and Socket.io.
 - Beware: an origin that is *not* allowed gets **no** CORS headers at all (the

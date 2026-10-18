@@ -2,7 +2,7 @@
 // usePageTitle(), the chat layer contributes the unread counter. Keeping both
 // in one module prevents the two writers from overwriting each other.
 
-export const APP_NAME = 'ChatWave';
+export const APP_NAME = 'RedChat';
 
 let baseTitle = APP_NAME;
 let unreadCount = 0;
@@ -13,7 +13,7 @@ function render() {
   document.title = `${prefix}${baseTitle}`;
 }
 
-/** Sets the page-specific part, e.g. setPageTitle('Sign in') → "Sign in · ChatWave". */
+/** Sets the page-specific part, e.g. setPageTitle('Sign in') → "Sign in · RedChat". */
 export function setPageTitle(title) {
   const clean = String(title ?? '').trim();
   baseTitle = clean ? `${clean} · ${APP_NAME}` : APP_NAME;

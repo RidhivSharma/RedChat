@@ -1,6 +1,6 @@
-# ChatWave — Client
+# RedChat — Client
 
-React single-page app (Vite, JavaScript) for the ChatWave real-time chat.
+React single-page app (Vite, JavaScript) for the RedChat real-time chat.
 No UI libraries — plain CSS with variables (`src/styles/global.css`).
 
 ## Setup

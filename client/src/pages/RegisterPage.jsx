@@ -89,7 +89,7 @@ export default function RegisterPage() {
             Create your account
           </h1>
           <p className="auth-card__subtitle">
-            A minute from now you will be chatting on ChatWave.
+            A minute from now you will be chatting on RedChat.
           </p>
         </header>
 

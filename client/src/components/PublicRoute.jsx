@@ -18,7 +18,7 @@ export default function PublicRoute() {
   const location = useLocation();
 
   if (loading) {
-    return <FullPageSpinner label="Loading ChatWave…" />;
+    return <FullPageSpinner label="Loading RedChat…" />;
   }
 
   if (user) {

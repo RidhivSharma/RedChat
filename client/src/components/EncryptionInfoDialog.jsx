@@ -150,7 +150,7 @@ export default function EncryptionInfoDialog({ open, conversation, currentUserId
               <p className="modal__text">
                 Compare this fingerprint with{' '}
                 <strong>{other?.displayName || 'your contact'}</strong> over a channel you trust
-                (in person, on a call). If both match, nobody — not even ChatWave — is in the
+                (in person, on a call). If both match, nobody — not even RedChat — is in the
                 middle of this conversation.
               </p>
               <code className="fingerprint">{state.fingerprint}</code>

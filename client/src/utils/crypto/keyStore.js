@@ -16,7 +16,7 @@
 
 import { canonicalPublicKey } from './jwk.js';
 
-const DB_NAME = 'chatwave-crypto';
+const DB_NAME = 'redchat-crypto';
 const DB_VERSION = 1;
 const STORE_NAME = 'privateKeys';
 const RECORD_ID = 'identity';

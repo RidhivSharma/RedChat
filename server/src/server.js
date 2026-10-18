@@ -85,7 +85,7 @@ async function start() {
     server.on('error', (err) => {
       if (err?.code === 'EADDRINUSE') {
         logger.error(
-          `port ${env.PORT} is already in use - is another ChatWave server still running?`
+          `port ${env.PORT} is already in use - is another RedChat server still running?`
         );
       } else {
         logger.error('HTTP server error', { error: err });
@@ -94,7 +94,7 @@ async function start() {
     });
 
     server.listen(env.PORT, () => {
-      logger.info(`ChatWave API listening on http://localhost:${env.PORT}`, {
+      logger.info(`RedChat API listening on http://localhost:${env.PORT}`, {
         env: env.NODE_ENV,
         clientOrigins: [...clientOrigins],
       });

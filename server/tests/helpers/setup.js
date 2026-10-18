@@ -11,7 +11,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, '../../.env'), quiet: true });
 dotenv.config({ path: path.resolve(__dirname, '../../../.env'), quiet: true });
 
-const DEFAULT_URI = 'mongodb://127.0.0.1:27017/chatwave';
+const DEFAULT_URI = 'mongodb://127.0.0.1:27017/redchat';
 
 /** Derives the test URI: the database name gets baked into "<name>_test". */
 function toTestDatabaseUri(uri) {
@@ -21,7 +21,7 @@ function toTestDatabaseUri(uri) {
   const rest = head.slice(schemeEnd + 3);
   const slash = rest.indexOf('/');
   const authority = slash === -1 ? rest : rest.slice(0, slash);
-  const dbName = slash === -1 || !rest.slice(slash + 1) ? 'chatwave' : rest.slice(slash + 1);
+  const dbName = slash === -1 || !rest.slice(slash + 1) ? 'redchat' : rest.slice(slash + 1);
   return `${scheme}://${authority}/${dbName}_test${query ? `?${query}` : ''}`;
 }
 

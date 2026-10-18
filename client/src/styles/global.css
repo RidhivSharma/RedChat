@@ -1,5 +1,5 @@
 /* ==========================================================================
-   ChatWave — global stylesheet
+   RedChat — global stylesheet
    Plain CSS + CSS variables only (no UI libraries, no Tailwind).
 
    Themes: the <html> element carries data-theme="light|dark" (applied by the

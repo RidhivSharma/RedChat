@@ -1,4 +1,4 @@
-# ChatWave — QA Checklist
+# RedChat — QA Checklist
 
 Manual test pass for the full app. Work top to bottom; every item lists what to
 do and what you should see. Anything that fails is a bug — note the step number,
@@ -43,7 +43,7 @@ the browser console output and the server log line.
       `ciphertext`/`iv`/`salt`/`iterations` (310000). No plaintext password
       anywhere.
 - [ ] Log out (sidebar footer → *Log out*) → back on `/login`, and a page
-      refresh stays logged out. `localStorage` has no `chatwave.token`.
+      refresh stays logged out. `localStorage` has no `redchat.token`.
 - [ ] Log in as Alice with a wrong password → one generic error "Invalid
       username or password" (`401 INVALID_CREDENTIALS`); same message for an
       unknown username (no account enumeration).
@@ -151,7 +151,7 @@ the browser console output and the server log line.
 
 - [ ] Bob selects a different conversation, Alice sends 3 messages
       → Bob's sidebar shows a `3` badge on the Alice row and the tab title
-        becomes `(3) ChatWave`.
+        becomes `(3) RedChat`.
 - [ ] Bob opens the Alice conversation with the tab visible, scrolled to the
       bottom → the badge disappears immediately and the title loses the prefix.
 - [ ] Bob scrolls up mid-history, Alice sends → the new message does not
@@ -244,11 +244,11 @@ the browser console output and the server log line.
 ## 12. Encryption verification in the database
 
 - [ ] Send a message with a distinctive plaintext, e.g.
-      `chatwave-marker-12345`, then in `mongosh`:
+      `redchat-marker-12345`, then in `mongosh`:
 
       ```js
-      use chatwave                     // or the db name you configured
-      db.messages.findOne({ ciphertext: { $regex: 'chatwave-marker', $options: 'i' } })
+      use redchat                     // or the db name you configured
+      db.messages.findOne({ ciphertext: { $regex: 'redchat-marker', $options: 'i' } })
       // → null: the plaintext is nowhere in the collection
 
       db.messages.find().sort({ createdAt: -1 }).limit(1).pretty()
@@ -256,7 +256,7 @@ the browser console output and the server log line.
       ```
 
 - [ ] Search the whole collection for the marker to be sure:
-      `db.messages.countDocuments({ ciphertext: /chatwave-marker/i })` → `0`
+      `db.messages.countDocuments({ ciphertext: /redchat-marker/i })` → `0`
       (the index on `ciphertext` is not needed — this is a one-off visual check).
 - [ ] System messages (membership activity) are the only plain-text rows
       (`type: "system"`, `encrypted: false`) and contain no chat text.
@@ -325,7 +325,7 @@ the browser console output and the server log line.
 - [ ] Click the theme toggle (moon/sun) in the sidebar footer.
       → The whole app switches to dark (backgrounds, bubbles, badges, modals),
         including the login page after logging out.
-- [ ] Refresh → the theme is remembered (`localStorage: chatwave.theme`) with no
+- [ ] Refresh → the theme is remembered (`localStorage: redchat.theme`) with no
       white flash on load.
 - [ ] Reload on a mobile viewport → the theme still applies (button is
       reachable on small screens).
@@ -372,7 +372,7 @@ the browser console output and the server log line.
 
 - [ ] Open a second tab as Alice → both tabs stay in sync (messages, deletes,
       presence); closing one keeps her online.
-- [ ] Expire the session (`localStorage` → change `chatwave.token` to garbage,
+- [ ] Expire the session (`localStorage` → change `redchat.token` to garbage,
       then send a message) → the app force-logs out and explains the expiry on
       the login page.
 - [ ] Send 25 messages quickly → after 20 within 10 s the server answers
