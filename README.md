@@ -282,6 +282,7 @@ production.
 ```
 Chat App/
 ├── package.json              # root scripts: dev (both), build (client), start (server), test
+├── vercel.json               # Vercel Services: the two services + the public routes
 ├── README.md                 # this file
 ├── QA_CHECKLIST.md           # manual test checklist
 ├── CHANGELOG.md              # what changed per phase
@@ -315,7 +316,6 @@ Chat App/
     │   ├── styles/           # global.css (design tokens, light/dark, responsive)
     │   └── utils/            # crypto/ (Web Crypto E2EE), formatting, validation
     ├── tests/                # node:test crypto + API contract tests
-    ├── vercel.json           # SPA rewrite for Vercel
     ├── vite.config.js
     └── .env.example
 ```
@@ -342,8 +342,14 @@ variables reach the browser bundle — never put secrets in `client/.env`.
 
 | Variable | Required | Example | Description |
 | -------- | -------- | ------- | ----------- |
-| `VITE_API_URL` | **yes** | `http://localhost:5000/api` | Base URL of the REST API, **including the `/api` prefix**. Inlined at build time. |
-| `VITE_SOCKET_URL` | **yes** | `http://localhost:5000` | Origin of the Socket.io server — the server URL **without** `/api`. Inlined at build time. |
+| `VITE_API_URL` | no | `http://localhost:5000/api` | Base URL of the REST API, **including the `/api` prefix**. Inlined at build time. Unset → the relative `/api` path (same origin). |
+| `VITE_SOCKET_URL` | no | `http://localhost:5000` | Origin of the Socket.io server — the server URL **without** `/api`. Inlined at build time. Unset → the origin that served the page. |
+
+Set both in `client/.env` for local development — the Vite dev server (`:5173`)
+and the API (`:5000`) are different origins there. **Leave both unset on the
+Vercel project:** the deployment serves the client and the API from one origin,
+so the app calls the relative `/api` path and connects the socket to the page's
+own origin.
 
 Changing a `VITE_*` value requires a rebuild/redeploy; it is baked into the
 bundle, not read at runtime.
@@ -469,11 +475,37 @@ Common ack error codes: `VALIDATION_ERROR`, `NOT_A_MEMBER`, `NOT_GROUP_ADMIN`,
 
 ## Deployment
 
-ChatWave deploys **entirely on Vercel**: two projects from this one repository —
-the React client (static build) and the Express + Socket.io API (a single Vercel
-Function on Fluid compute; WebSockets are a public beta feature there) — plus a
-MongoDB Atlas database. A classic long-lived host for the API works too, see
+ChatWave deploys as **one Vercel project with two services** (Vercel Services),
+built from this one repository: the React client (static Vite build) and the
+Express + Socket.io API (a Vercel Function on Fluid compute; WebSockets are a
+public beta feature there) — plus a MongoDB Atlas database. The root
+`vercel.json` declares both services and the public routes. A classic
+long-lived host for the API works too, see
 [Alternative: Render / Railway](#alternative-render--railway).
+
+### How the routing works
+
+Everything is served from **one domain**, split by the top-level rewrites in
+`vercel.json` (most specific first):
+
+| Public request | Service | Served by |
+| -------------- | ------- | --------- |
+| `/api/*` | `server` | Express — the app mounts every route under `/api`, and the rewrite forwards the original path unchanged |
+| `/socket.io/*` | `server` | Socket.io — the WebSocket upgrade for realtime |
+| everything else | `client` | the static SPA, with its own `/index.html` fallback so client-side routes like `/login` work on refresh |
+
+Both services are **public**, because both are reached by the **browser**. There
+are deliberately **no service bindings**: a binding injects an internal URL into
+server-side functions at runtime only (never into a static build), and the
+ChatWave client is browser code — it cannot resolve or use an internal address.
+The API never calls the client either, so no service-to-service call exists to
+bind.
+
+Because there is a single origin, the client needs no API URLs at all: `api.js`
+falls back to the relative `/api` path and `socket.js` to the page's own origin
+when `VITE_API_URL` / `VITE_SOCKET_URL` are unset. **Do not set them on the
+Vercel project** — a `VITE_*` value left over from the older two-project layout
+would be baked into the bundle and send the browser to the wrong host.
 
 Vercel caveats, straight from its serverless model — they are the price of
 "everything on Vercel":
@@ -495,7 +527,7 @@ Vercel caveats, straight from its serverless model — they are the price of
   keeps its function instance's memory provisioned for billing; idle CPU is
   free.
 
-### 0. Database — MongoDB Atlas
+### 1. Database — MongoDB Atlas
 
 1. Create a free cluster at <https://cloud.mongodb.com>.
 2. *Database Access* → add a user with a strong password.
@@ -506,49 +538,48 @@ Vercel caveats, straight from its serverless model — they are the price of
    (`@` → `%40`, `:` → `%3A`, `/` → `%2F`, `?` → `%3F`, `#` → `%23`); `env.js`
    also fixes an unencoded `@` in memory at boot and warns.
 
-### 1. API project — Vercel
+### 2. Vercel project
 
 1. Push the repository to GitHub, then import it at <https://vercel.com/new>.
-2. **Root Directory:** `server` (important — without it Vercel would look for the
-   Express app in the repository root). Vercel detects Express ("Backends on
-   Vercel") and deploys `server/index.js` as a single Function; leave the build
-   settings alone.
-3. Environment variables (Production + Preview):
+2. **Root Directory:** leave it at the repository root — that is where
+   `vercel.json` (the services definition) lives; each service brings its own
+   `root` (`client`, `server`). Framework/build/output settings come from those
+   service definitions, so leave the dashboard's build settings alone.
+3. Environment variables (Production + Preview) — shared by the services:
 
    | Variable | Value |
    | -------- | ----- |
    | `MONGODB_URI` | your Atlas connection string **with** the database name (`…/chatwave`) |
    | `JWT_SECRET` | long random string (32+ chars, different from dev) |
    | `JWT_EXPIRES_IN` | `7d` (or your preference) |
-   | `CLIENT_URL` | the deployed client origin, e.g. `https://chatwave-client.vercel.app` — fill this in after step 2 (comma-separate extras) |
+   | `CLIENT_URL` | optional — only for origins other than this deployment, see step 3 |
    | `REQUIRE_E2EE` | `true` |
 
-   Do **not** set `PORT` (there is no listener to bind) or `NODE_ENV` (Vercel
-   sets `production`).
-4. Deploy and open `https://<api-project>.vercel.app/api/health` →
-   `{"status":"ok"}`. On first use the endpoint may take a second (cold start).
+   Do **not** set `PORT` (there is no listener to bind), `NODE_ENV` (Vercel
+   sets `production`) or `VITE_API_URL` / `VITE_SOCKET_URL` (one origin: the
+   app uses the relative `/api` path and the page's own origin).
+4. Deploy, then open `https://<project>.vercel.app/api/health` →
+   `{"status":"ok"}` and `https://<project>.vercel.app/` for the app. On first
+   use a cold start can add a second.
 
-### 2. Client project — Vercel
+### 3. CORS boundary
 
-1. **New Project** → same repository → **Root Directory:** `client`. Framework
-   preset *Vite*, build command `npm run build`, output directory `dist`.
-   `client/vercel.json` rewrites every path to `/index.html` so client-side
-   routes like `/login` work on refresh.
-2. Environment variables — set them **before** the build (Vite inlines them):
+The client and the API share this one origin, so the deployed browser makes no
+cross-origin request and CORS plays no part in it (the server sends no CORS
+headers, which a same-origin request does not need). `CLIENT_URL` therefore
+matters only when the app is opened from *another* origin — a separate dev
+server, another host, or a custom domain that does not route through this
+project. In that case list those origins in `CLIENT_URL` (exact origin: scheme +
+host, no trailing slash; comma-separated) and **redeploy** — environment values
+are applied per deployment. Both Express CORS and the Socket.io handshake read
+this list.
 
-   | Variable | Value |
-   | -------- | ----- |
-   | `VITE_API_URL` | API URL **+ `/api`**, e.g. `https://chatwave-api.vercel.app/api` |
-   | `VITE_SOCKET_URL` | API URL **without** `/api`, e.g. `https://chatwave-api.vercel.app` |
+### 4. Changing things later
 
-3. Deploy and open the client.
-
-### 3. Close the CORS loop
-
-Put the client origin into the API project's `CLIENT_URL` (exact origin: scheme
-+ host, no trailing slash; comma-separate extra origins such as a Vercel preview
-URL), then **redeploy the API project** — environment values are applied per
-deployment. Both Express CORS and the Socket.io handshake read this list.
+`vercel.json` and environment variables take effect only on a new deployment —
+redeploy after editing either. `vercel dev` runs both services locally against
+the same routing table (no Vercel account needed with `vercel dev -L`), which is
+the quickest way to test a routing change before pushing.
 
 ### Alternative: Render / Railway
 
@@ -561,11 +592,13 @@ Prefer a long-lived process (no 300 s connection cap, no instance split)? Deploy
 | Build command | `npm install --prefix server` |
 | Start command | `npm --prefix server start` (runs `server/src/server.js`) |
 | Health check path | `/api/health` |
-| Environment | same variables as step 1, **plus** `NODE_ENV=production`; do not set `PORT` |
+| Environment | the same variables as step 2, **plus** `NODE_ENV=production`; do not set `PORT` |
 
 Both hosts support WebSockets out of the box and use the server's presence
-heartbeat and graceful shutdown. Keep the client on Vercel and point
-`VITE_API_URL` / `VITE_SOCKET_URL` at the new host, then redeploy the client.
+heartbeat and graceful shutdown. To keep the client on Vercel and point it at
+the new host, set `VITE_API_URL` / `VITE_SOCKET_URL` on the Vercel project
+(absolute URLs — the two-host layout is cross-origin again, so add the client
+origin to `CLIENT_URL`) and redeploy; the Vite build inlines them.
 Free Render instances sleep after inactivity: the first request can take 30–60 s
 while the service wakes (the client shows its reconnecting banner).
 
@@ -595,6 +628,9 @@ while the service wakes (the client shows its reconnecting banner).
 Symptom: the request fails with "No 'Access-Control-Allow-Origin' header is
 present" — the API might even log a 200.
 
+- **The deployed app cannot hit this**: client and API share one origin there,
+  so no cross-origin request is made and no CORS headers are needed. The
+  checklist below is for a second origin (local dev, another host).
 - `CLIENT_URL` must match the browser **origin exactly**: scheme + host + port,
   no path, no trailing slash. `http://localhost:5173` ≠ `http://127.0.0.1:5173`.
 - Vite falls back to `5174`/`5175` when 5173 is busy — add those origins (a
@@ -608,9 +644,10 @@ present" — the API might even log a 200.
 
 ### Socket not connecting (banner stays "Connecting…" / "Offline")
 
-- `VITE_SOCKET_URL` must be the server **origin only** — no `/api`, no trailing
-  slash (`https://chatwave-api.vercel.app`). `VITE_API_URL` is the one with
-  `/api`.
+- Local dev only: `VITE_SOCKET_URL` must be the server **origin only** — no
+  `/api`, no trailing slash (`http://localhost:5000`). `VITE_API_URL` is the one
+  with `/api`. On the deployed project leave both unset, so the socket connects
+  to the page's own origin (see [Deployment](#deployment)).
 - `VITE_*` variables are baked in at build time: after changing them you must
   rebuild/redeploy the client (restart `npm run dev` locally).
 - Check the server is reachable: open `/api/health` from the same browser.

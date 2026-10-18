@@ -423,5 +423,86 @@ URLs, comma-separated `CLIENT_URL`, the SPA rewrite in `client/vercel.json`).
   still logs a warning per test file locally; it does not affect Vercel
   (working DNS) and is unrelated to this phase.
 
+## Phase 13 — Vercel Services: one project, two services (2026-10-18)
+
+Replaced the Phase 12 two-project layout with **one Vercel project that declares
+two services**, so the client and the API share a domain and a single deployment.
+Routing is owned by a new root `vercel.json`; no service binding is declared,
+because none can be (see below).
+
+**Root**
+- `vercel.json` (new): `services.client` (`root: client`, `framework: vite`) and
+  `services.server` (`root: server`, `framework: express`,
+  `entrypoint: index.js` — pinned so Vercel can never resolve to `src/app.js`,
+  which would silently drop Socket.io). Public rewrites, most specific first:
+  `/api/(.*)` → `server`, `/socket.io/(.*)` → `server` (the WebSocket upgrade),
+  `/(.*)` → `client`. Vercel forwards the **original** path into a service, so
+  Express keeps its `/api` mounts and Socket.io its `/socket.io` path with no
+  code change.
+- The client service carries the SPA fallback (`/(.*)` → `/index.html`) that
+  used to live in `client/vercel.json`; that file is deleted so routing has one
+  source of truth.
+- **No bindings, deliberately:** a binding injects an internal URL into
+  server-side functions at runtime only — it never reaches a static browser
+  build, and it does not resolve during builds. The ChatWave client is a Vite
+  SPA running in the visitor's browser, so it reaches the API through the public
+  rewrites; the API makes no outbound calls at all (no `fetch`/`http.request` in
+  `server/src`), so there is no service-to-service call to bind.
+
+**Client**
+- `src/services/socket.js`: when `VITE_SOCKET_URL` is unset, a production build
+  now connects to the **page's own origin** (`io(undefined, …)` → whatever URL
+  served the app) instead of baking in `http://localhost:5000`. A set value is
+  still used verbatim, and the development fallback + warning are unchanged.
+- `src/services/api.js`: unchanged — it already falls back to the relative
+  `/api` path when `VITE_API_URL` is unset.
+- `.env.example`: documents that both variables are for local dev only and must
+  stay unset on Vercel (one origin there).
+
+**Docs**
+- `README.md`: Deployment rewritten for services mode — the routing table, why
+  both services are public and why there are no bindings, the single-project
+  setup (root directory = repository root, env vars, no `VITE_*`), CORS reduced
+  to the "other origins" case, `vercel dev` for testing the routing table
+  locally, and the Render/Railway alternative kept (which does need the absolute
+  `VITE_*` values again). Client env table marks both variables optional with
+  their defaults; folder structure and the socket/CORS troubleshooting entries
+  updated.
+
+**Verified**
+- `npm run build` (root, with the local `client/.env`) → 115 modules, 411.77 kB
+  JS (124.83 kB gzip) + 40.09 kB CSS; the bundle still contains the absolute
+  `http://localhost:5000` values (local-dev behaviour unchanged).
+- The same build with `client/.env` momentarily moved away (the Vercel case) →
+  the bundle contains **0** occurrences of `localhost:5000`, the dev warning
+  string is eliminated, and the `/api` fallback is present: the deployed app
+  talks to its own origin only.
+- `npm test --prefix client` → **24/24 pass**.
+- `vercel.json` validated against Vercel's published schema
+  (<https://openapi.vercel.sh/vercel.json>, downloaded fresh in this session)
+  with a throwaway subset validator → **valid**, including `services`, the
+  service-targeted `rewrites` destinations and the service object keys.
+- Server boot: `PORT=5099 node src/server.js` → `MongoDB connected`,
+  `ChatWave API listening on http://localhost:5099`, `GET /api/health` → 200
+  `{"status":"ok"}`, `GET /api/conversations` without a token → 401. (The
+  pre-existing `MONGODB_URI` warnings — unencoded `@`, no database name —
+  appeared exactly as before.)
+
+**Notes / assumptions**
+- Neither `vercel dev` nor a real deployment could be executed here (no Vercel
+  CLI or account in this environment), so the routing table is unverified by
+  execution — it is validated against the published schema and the Services
+  documentation only. After deploying, check `/api/health`, a hard refresh on
+  `/login`, and a live socket.
+- Assumed the single-origin layout is wanted: both services public through the
+  top-level rewrites. Keeping the API internal is not an option while the client
+  is browser code — a binding cannot be used from the browser, so the API would
+  be unreachable.
+- `client/public/_redirects` (Netlify fallback) is still copied into `dist`;
+  harmless on Vercel and left untouched.
+- The service names `client` / `server` follow the directories and the suggested
+  config; renaming them means updating the `services` keys and the two service
+  rewrites.
+
 
 

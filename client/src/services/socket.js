@@ -9,11 +9,21 @@
 
 import { io } from 'socket.io-client';
 
-const SOCKET_URL = (
-  import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000'
-).replace(/\/+$/, '');
+// Where the Socket.io server lives:
+//   - VITE_SOCKET_URL set (local dev: http://localhost:5000) → used as given.
+//   - development without it → the local API, plus the warning below.
+//   - production without it → the origin that served the page. That is the
+//     deployed layout: one Vercel project (services mode) whose top-level
+//     rewrite sends /socket.io/* on this same domain to the API service.
+const configuredSocketUrl = import.meta.env.VITE_SOCKET_URL;
 
-if (import.meta.env.DEV && !import.meta.env.VITE_SOCKET_URL) {
+const SOCKET_URL = configuredSocketUrl
+  ? configuredSocketUrl.replace(/\/+$/, '')
+  : import.meta.env.DEV
+    ? 'http://localhost:5000'
+    : undefined;
+
+if (import.meta.env.DEV && !configuredSocketUrl) {
   console.warn(
     '[ChatWave] VITE_SOCKET_URL is not set — realtime falls back to http://localhost:5000. ' +
       'Copy client/.env.example to client/.env and restart the dev server.'
@@ -36,6 +46,7 @@ export class SocketError extends Error {
  * when to connect (only while logged in) and disconnects on logout.
  */
 export function createSocket(token) {
+  // SOCKET_URL === undefined means "same origin as the page" in socket.io-client.
   return io(SOCKET_URL, {
     auth: { token },
     autoConnect: false,
