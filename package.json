@@ -1,0 +1,14 @@
+{
+  "name": "chatwave",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ChatWave — real-time one-on-one and group chat (React + Express + Socket.io + MongoDB, E2EE via Web Crypto)",
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,magenta \"npm --prefix server run dev\" \"npm --prefix client run dev\"",
+    "build": "npm --prefix client run build",
+    "start": "npm --prefix server run start"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.6"
+  }
+}
